@@ -1,0 +1,140 @@
+"""Green agent implementation - manages assessment and evaluation."""
+
+import uvicorn
+import tomllib
+import dotenv
+import json
+import time
+from a2a.server.apps import A2AStarletteApplication
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.agent_execution import AgentExecutor, RequestContext
+from a2a.server.events import EventQueue
+from a2a.server.tasks import InMemoryTaskStore
+from a2a.types import AgentCard, SendMessageSuccessResponse, Message
+from a2a.utils import new_agent_text_message, get_text_parts
+from src.util.my_a2a import parse_tags, send_message
+
+from dataclasses import dataclass
+
+
+dotenv.load_dotenv()
+
+
+def load_agent_card_toml(agent_name):
+    current_dir = __file__.rsplit("/", 1)[0]
+    with open(f"{current_dir}/{agent_name}.toml", "rb") as f:
+        return tomllib.load(f)
+
+
+
+
+
+async def ask_agent_to_code(white_agent_url, max_num_steps=1):
+    # For simplicity, green agent just sends the request and collects the response.
+    # No environment interaction or multiple steps for now.
+    task_description = """
+Your task is to implement the Robertson ODE problem in PETSc as a complete, compilable C file.
+
+The system of ordinary differential equations is:
+$$
+\\frac{dy_1}{dt} = -0.04 y_1 + 10^4 y_2 y_3 \\
+\\frac{dy_2}{dt} = 0.04 y_1 - 10^4 y_2 y_3 - 3 \\cdot 10^7 y_2^2 \\
+\\frac{dy_3}{dt} = 3 \\cdot 10^7 y_2^2
+$$
+
+Initial conditions at $t=0$: $y_1=1$, $y_2=0$, $y_3=0$.
+
+Your implementation MUST be a single, complete C source file that can be compiled with a C compiler.
+It must include all necessary PETSc headers (e.g., `petscts.h`) and have a `main` function that:
+1. Initializes PETSc.
+2. Sets up the TS (Time Stepper) solver.
+3. Solves the ODE system from t=0 to t=100.
+4. Prints the final solution.
+5. Finalizes PETSc.
+
+IMPORTANT:
+- Any and all explanatory text, descriptions, or notes you provide MUST be inside C-style comments (`/* ... */` or `// ...`) within the code.
+- Do NOT write any text outside of the code block.
+- Do NOT include any markdown formatting like ` ```c ` or ` ``` ` in your response.
+- The generated code will be saved in a file called generated_code.c
+"""
+
+    print(
+        f"@@@ Green agent: Sending message to white agent... -->\n{task_description}"
+    )
+    white_agent_response = await send_message(
+        white_agent_url, task_description
+    )
+    res_root = white_agent_response.root
+    assert isinstance(res_root, SendMessageSuccessResponse)
+    res_result = res_root.result
+    assert isinstance(
+        res_result, Message
+    )  # though, a robust design should also support Task
+
+    text_parts = get_text_parts(res_result.parts)
+    assert len(text_parts) == 1, (
+        "Expecting exactly one text part from the white agent"
+    )
+    white_text = text_parts[0]
+    print(f"@@@ White agent response:\n{white_text}")
+    # parse the action out
+    if "PETSC ERROR" in white_text:
+        success = 0
+    else:
+        success = 1
+    # success = parse_tags(white_text)
+    return {"success": success}
+
+
+class GreenAgentExecutor(AgentExecutor):
+    def __init__(self):
+        pass
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
+        # parse the task
+        print("Green agent: Received a task, parsing...")
+        user_input = context.get_user_input()
+        tags = parse_tags(user_input)
+        white_agent_url = tags["white_agent_url"]
+
+        metrics = {}
+
+        print("Green agent: Starting code generation request...")
+        timestamp_started = time.time()
+        res = await ask_agent_to_code(white_agent_url)
+
+        metrics["time_used"] = time.time() - timestamp_started
+        # For now, we just indicate success of getting a response
+        metrics["success"] = bool(res.get("success"))
+        result_emoji = "✅" if metrics["success"] else "❌"
+
+        print("Green agent: Code generation request complete.")
+        await event_queue.enqueue_event(
+            new_agent_text_message(
+                f"Finished. White agent code generated: {result_emoji}\nMetrics: {metrics}\n" 
+                # f"Generated Code:\n```python\n{res.get('generated_code', 'No code generated.')}\n```\n"
+            )
+        )
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
+        raise NotImplementedError
+
+
+def start_green_agent(agent_name="green_agent", host="localhost", port=9001):
+    print("Starting green agent...")
+    agent_card_dict = load_agent_card_toml(agent_name)
+    url = f"http://{host}:{port}"
+    agent_card_dict["url"] = url  # complete all required card fields
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=GreenAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+    )
+
+    app = A2AStarletteApplication(
+        agent_card=AgentCard(**agent_card_dict),
+        http_handler=request_handler,
+    )
+
+    uvicorn.run(app.build(), host=host, port=port)

@@ -13,7 +13,7 @@ from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import AgentCard, SendMessageSuccessResponse, Message
 from a2a.utils import new_agent_text_message, get_text_parts
 from src.util.my_a2a import parse_tags, send_message
-
+from pathlib import Path
 from dataclasses import dataclass
 
 
@@ -25,65 +25,49 @@ def load_agent_card_toml(agent_name):
     with open(f"{current_dir}/{agent_name}.toml", "rb") as f:
         return tomllib.load(f)
 
-
-
-
+def read_from_jsonl(file_path):
+    data = []
+    with open(file_path, 'r', encoding='utf-8') as file:
+        for line in file:
+            data.append(json.loads(line.strip()))
+    return data
 
 async def ask_agent_to_code(white_agent_url, max_num_steps=1):
     # For simplicity, green agent just sends the request and collects the response.
     # No environment interaction or multiple steps for now.
-    task_description = """
-Your task is to implement the Robertson ODE problem in PETSc as a complete, compilable C file.
+    data_file_path = Path("./data/problems_test.jsonl")
+    test_data = read_from_jsonl(data_file_path)
 
-The system of ordinary differential equations is:
-$$
-\\frac{dy_1}{dt} = -0.04 y_1 + 10^4 y_2 y_3 \\
-\\frac{dy_2}{dt} = 0.04 y_1 - 10^4 y_2 y_3 - 3 \\cdot 10^7 y_2^2 \\
-\\frac{dy_3}{dt} = 3 \\cdot 10^7 y_2^2
-$$
+    for data in test_data:
+        pname = data["problem_name"]
+        pid = data["problem_id"]
+        pdesc = data["problem_description"]
 
-Initial conditions at $t=0$: $y_1=1$, $y_2=0$, $y_3=0$.
+        print(
+            f"@@@ Green agent: Sending message to white agent... -->\n{pdesc}"
+        )
+        white_agent_response = await send_message(
+            white_agent_url, pdesc
+        )
+        res_root = white_agent_response.root
+        assert isinstance(res_root, SendMessageSuccessResponse)
+        res_result = res_root.result
+        assert isinstance(
+            res_result, Message
+        )  # though, a robust design should also support Task
 
-Your implementation MUST be a single, complete C source file that can be compiled with a C compiler.
-It must include all necessary PETSc headers (e.g., `petscts.h`) and have a `main` function that:
-1. Initializes PETSc.
-2. Sets up the TS (Time Stepper) solver.
-3. Solves the ODE system from t=0 to t=100.
-4. Prints the final solution.
-5. Finalizes PETSc.
-
-IMPORTANT:
-- Any and all explanatory text, descriptions, or notes you provide MUST be inside C-style comments (`/* ... */` or `// ...`) within the code.
-- Do NOT write any text outside of the code block.
-- Do NOT include any markdown formatting like ` ```c ` or ` ``` ` in your response.
-- The generated code will be saved in a file called generated_code.c
-"""
-
-    print(
-        f"@@@ Green agent: Sending message to white agent... -->\n{task_description}"
-    )
-    white_agent_response = await send_message(
-        white_agent_url, task_description
-    )
-    res_root = white_agent_response.root
-    assert isinstance(res_root, SendMessageSuccessResponse)
-    res_result = res_root.result
-    assert isinstance(
-        res_result, Message
-    )  # though, a robust design should also support Task
-
-    text_parts = get_text_parts(res_result.parts)
-    assert len(text_parts) == 1, (
-        "Expecting exactly one text part from the white agent"
-    )
-    white_text = text_parts[0]
-    print(f"@@@ White agent response:\n{white_text}")
-    # parse the action out
-    if "PETSC ERROR" in white_text:
-        success = 0
-    else:
-        success = 1
-    # success = parse_tags(white_text)
+        text_parts = get_text_parts(res_result.parts)
+        assert len(text_parts) == 1, (
+            "Expecting exactly one text part from the white agent"
+        )
+        white_text = text_parts[0]
+        print(f"@@@ White agent response:\n{white_text}")
+        # parse the action out
+        if "PETSC ERROR" in white_text:
+            success = 0
+        else:
+            success = 1
+        # success = parse_tags(white_text)
     return {"success": success}
 
 

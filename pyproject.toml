@@ -8,6 +8,7 @@ dependencies = [
     "a2a-sdk[http-server]>=0.3.8",
     "dotenv>=0.9.9",
     "litellm>=1.80.5",
+    "pathlib>=1.0.1",
     "typer>=0.19.2",
     "uvicorn>=0.37.0",
 ]

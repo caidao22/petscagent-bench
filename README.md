@@ -3,17 +3,44 @@ WIP code for agentifying petscagent-bench using A2A and MCP standards.
 ## Project Structure
 
 ```
-src/
-├── green_agent/    # Assessment manager agent
-├── white_agent/    # Target agent being tested
-└── launcher.py     # Evaluation coordinator
+├── data
+│   └── problems_test.jsonl
+├── main.py
+├── pyproject.toml
+├── README.md
+├── src
+│   ├── green_agent # Assessment manager agent
+│   ├── launcher.py # Evaluation coordinator
+│   ├── util
+│   └── white_agent # Target agent being tested
+├── tools
+│   └── petsc_mcp_servers
+```
+
+## Cloning the Repository
+
+This repository includes a Git submodule.
+
+To clone the repository along with its submodule, use:
+```bash
+git clone --recursive <repo-url>
+```
+
+If you have already cloned the repository without the option `--recursive`, initialize and update the submodule by running the following command from the repository root:
+
+```bash
+git submodule update --init
 ```
 
 ## Installation
 
+Install the required dependencies using `uv`:
+
 ```bash
 uv sync
 ```
+
+Note: Python 3.14 is currently not supported. Please use Python 3.13 or 3.12 to avoid installation issues.
 
 ## Usage
 

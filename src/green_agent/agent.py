@@ -16,7 +16,7 @@ from a2a.utils import new_agent_text_message, get_text_parts
 from src.util.my_a2a import parse_tags, send_message
 from pathlib import Path
 from dataclasses import dataclass
-from .mcp_client import MCPClient
+import mcp
 
 dotenv.load_dotenv()
 
@@ -69,9 +69,11 @@ async def benchmark_code_generation_agents(white_agent_url, mcp_client, max_num_
         lines = white_text.strip().splitlines()
         file_path = lines[1].strip()
         cli_args = lines[2].strip()
-        await mcp_client.run_bash_command("upload_file", file_path)
-        await mcp_client.run_bash_command("make", pname)
-        result = await mcp_client.run_bash_command(f"./{pname}", cli_args)
+
+        await mcp_client.initialize()
+        await mcp_client.upload_file(filename = file_path)
+        await mcp_client.make(executable = pname)
+        await mcp_client.run_bash_command(string = './' + pname + ' ' + ' '.join(cli_args))
         print(result.content[0].text) # use LLM as a judge
         # parse the action out
         if result.isError:
@@ -84,7 +86,9 @@ async def benchmark_code_generation_agents(white_agent_url, mcp_client, max_num_
 
 class GreenAgentExecutor(AgentExecutor):
     def __init__(self):
-        self.client = MCPClient()
+      url = 'http://localhost:8080/mcp'
+      import tools.petsc_mcp_servers.petsc_compile_run_mcp_client
+      self.mcp_client = tools.petsc_mcp_servers.petsc_compile_run_mcp_client.PetscCompileRunMCPClient(url)
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         # parse the task
@@ -95,15 +99,12 @@ class GreenAgentExecutor(AgentExecutor):
 
         metrics = {}
 
-        print("Green agent: Connecting to MCP servers...")
         try:
-            await self.client.connect_to_local_server("./tools/petsc_mcp_servers/petsc_compile_run_mcp_server.py")
-            #await self.client.connect_to_remote_server(sys.argv[1])
             print("Green agent: Starting code generation request...")
             timestamp_started = time.time()
-            res = await benchmark_code_generation_agents(white_agent_url, self.client)
+            res = await benchmark_code_generation_agents(white_agent_url, self.mcp_client)
         finally:
-            await self.client.cleanup()
+            pass
 
         metrics["time_used"] = time.time() - timestamp_started
         # For now, we just indicate success of getting a response

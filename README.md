@@ -40,8 +40,6 @@ Install the required dependencies using `uv`:
 uv sync
 ```
 
-Note: Python 3.14 is currently not supported. Please use Python 3.13 or 3.12 to avoid installation issues.
-
 ## Usage
 
 To test the code locally, make sure PETSc is installed.

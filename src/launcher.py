@@ -2,7 +2,7 @@ import multiprocessing
 import json
 import mcp
 from src.green_agent.server import start_green_agent
-from src.white_agent.petsc_agent import start_white_agent
+from src.purple_agent.petsc_agent import start_purple_agent
 from src.util.a2a_comm import wait_agent_ready, send_message
 import os
 
@@ -20,16 +20,16 @@ async def launch_evaluation():
     assert await wait_agent_ready(green_url), "Green agent not ready in time"
     print("Green agent is ready.")
 
-    # start white agent
-    print("Launching white agent...")
-    white_address = ("localhost", 9002)
-    white_url = f"http://{white_address[0]}:{white_address[1]}"
-    p_white = multiprocessing.Process(
-        target=start_white_agent, args=("general_white_agent", *white_address)
+    # start purple agent
+    print("Launching purple agent...")
+    purple_address = ("localhost", 9002)
+    purple_url = f"http://{purple_address[0]}:{purple_address[1]}"
+    p_purple = multiprocessing.Process(
+        target=start_purple_agent, args=("general_purple_agent", *purple_address)
     )
-    p_white.start()
-    assert await wait_agent_ready(white_url), "White agent not ready in time"
-    print("White agent is ready.")
+    p_purple.start()
+    assert await wait_agent_ready(purple_url), "purple agent not ready in time"
+    print("purple agent is ready.")
 
     # start the MCP server for green agent
     # print("Launching MCP server for green agent...")
@@ -43,9 +43,9 @@ async def launch_evaluation():
     print("Sending task description to green agent...")
     task_text = f"""
 Your task is to instantiate petscagent-bench to test the agent located at:
-<white_agent_url>
-http://{white_address[0]}:{white_address[1]}/
-</white_agent_url>
+<purple_agent_url>
+http://{purple_address[0]}:{purple_address[1]}/
+</purple_agent_url>
 You should use the following env configuration:
     """
     print("Task description:")
@@ -58,6 +58,6 @@ You should use the following env configuration:
     print("Evaluation complete. Terminating agents...")
     p_green.terminate()
     p_green.join()
-    p_white.terminate()
-    p_white.join()
+    p_purple.terminate()
+    p_purple.join()
     print("Agents terminated.")

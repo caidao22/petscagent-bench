@@ -16,7 +16,7 @@ Assess the coding ability of an agent.
 tags = ["green agent", "assessment hosting", "petscagent-bench"]
 examples = ["""    
 Your task is to instantiate petscagent-bench to test the agent located at:
-<white_agent_url>
+<purple_agent_url>
 http://localhost:9002/
-</white_agent_url>
+</purple_agent_url>
     """]

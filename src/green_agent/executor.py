@@ -30,17 +30,17 @@ class GreenAgentExecutor(AgentExecutor):
         self.agents: dict[str, Agent] = {}  # context_id to agent instance
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
-        # parse the context to get white agent URL and other configurations
+        # parse the context to get purple agent URL and other configurations
         print("Green agent: Received a task, parsing...")
         user_input = context.get_user_input()
         tags = parse_tags(user_input)
-        white_agent_url = tags["white_agent_url"]
+        purple_agent_url = tags["purple_agent_url"]
 
         # create a new task
         task = new_task(context.message)
         await event_queue.enqueue_event(task)
         context_id = task.context_id
-        agent = Agent(white_agent_url=white_agent_url, mcp_client=self.client)
+        agent = Agent(purple_agent_url=purple_agent_url, mcp_client=self.client)
         self.agents[context_id] = agent
         agent = self.agents.get(context_id)
         updater = TaskUpdater(event_queue, task.id, context_id)

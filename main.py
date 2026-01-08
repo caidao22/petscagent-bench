@@ -4,7 +4,7 @@ import typer
 import asyncio
 
 from src.green_agent.server import start_green_agent
-from src.white_agent.petsc_agent import start_white_agent
+from src.purple_agent.petsc_agent import start_purple_agent
 from src.launcher import launch_evaluation
 
 app = typer.Typer(help="Agentified petscagent-bench - PETSc coding agent assessment framework")
@@ -17,9 +17,9 @@ def green():
 
 
 @app.command()
-def white():
-    """Start the white agent (target being tested)."""
-    start_white_agent()
+def purple():
+    """Start the purple agent (target being tested)."""
+    start_purple_agent()
 
 
 @app.command()

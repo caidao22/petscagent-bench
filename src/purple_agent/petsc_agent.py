@@ -1,4 +1,4 @@
-"""White agent implementation - the target agent being tested."""
+"""purple agent implementation - the target agent being tested."""
 
 import uvicorn
 import dotenv
@@ -31,7 +31,7 @@ SYSTEM_CODE_CONTRACT = (
 )
 
 
-def prepare_white_agent_card(url):
+def prepare_purple_agent_card(url):
     skill = AgentSkill(
         id="task_fulfillment",
         name="Task Fulfillment",
@@ -153,10 +153,10 @@ class PetscAgentExecutor(AgentExecutor):
         raise NotImplementedError
 
 
-def start_white_agent(agent_name="petsc_agent", host="localhost", port=9002):
+def start_purple_agent(agent_name="petsc_agent", host="localhost", port=9002):
     print("Starting petsc agent...")
     url = f"http://{host}:{port}"
-    card = prepare_white_agent_card(url)
+    card = prepare_purple_agent_card(url)
 
     request_handler = DefaultRequestHandler(
         agent_executor=PetscAgentExecutor(),
@@ -172,4 +172,4 @@ def start_white_agent(agent_name="petsc_agent", host="localhost", port=9002):
 
 
 if __name__ == "__main__":
-    start_white_agent()
+    start_purple_agent()

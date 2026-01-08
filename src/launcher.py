@@ -8,7 +8,7 @@ from src.green_agent.agent import start_green_agent
 from src.white_agent.petsc_agent import start_white_agent
 from src.util.my_a2a import wait_agent_ready, send_message
 import os
-# from tools.petsc_mcp_servers.petsc_compile_run_mcp_server import main as mcp_main
+from petsc_mcp_servers.petsc_compile_run_mcp_server import main as start_green_mcp_agent
 
 async def launch_evaluation():
     # start green agent
@@ -34,12 +34,12 @@ async def launch_evaluation():
     print("White agent is ready.")
 
     # start the MCP server for green agent
-    # print("Launching MCP server for green agent...")
-    # mcp_server_process = multiprocessing.Process(
-    #     target=mcp_main, args=()
-    # )
-    # mcp_server_process.start()
-    # print("MCP server is ready.")
+    print("Launching MCP server for green agent...")
+    p_green_mcp = multiprocessing.Process(
+        target=start_green_mcp_agent, args=()
+    )
+    p_green_mcp.start()
+    print("MCP server is ready.")
 
     # send the task description
     print("Sending task description to green agent...")

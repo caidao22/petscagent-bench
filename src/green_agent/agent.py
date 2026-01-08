@@ -87,8 +87,8 @@ async def benchmark_code_generation_agents(white_agent_url, mcp_client, max_num_
 class GreenAgentExecutor(AgentExecutor):
     def __init__(self):
       url = 'http://localhost:8080/mcp'
-      import tools.petsc_mcp_servers.petsc_compile_run_mcp_client
-      self.mcp_client = tools.petsc_mcp_servers.petsc_compile_run_mcp_client.PetscCompileRunMCPClient(url)
+      import petsc_mcp_servers.petsc_compile_run_mcp_client
+      self.mcp_client = petsc_mcp_servers.petsc_compile_run_mcp_client.PetscCompileRunMCPClient(url)
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         # parse the task

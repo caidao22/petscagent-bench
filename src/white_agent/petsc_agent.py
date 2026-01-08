@@ -30,6 +30,7 @@ SYSTEM_CODE_CONTRACT = (
     "- Violating this contract is a hard failure\n"
 )
 
+
 def prepare_white_agent_card(url):
     skill = AgentSkill(
         id="task_fulfillment",
@@ -145,7 +146,7 @@ class PetscAgentExecutor(AgentExecutor):
 
         finally:
             # 7. Clean up the working directory
-            #shutil.rmtree(work_dir)
+            # shutil.rmtree(work_dir)
             pass
 
     async def cancel(self, context, event_queue) -> None:

@@ -1,16 +1,14 @@
-"""Launcher module - initiates and coordinates the evaluation process."""
-
 import multiprocessing
 import json
-
 import mcp
-from src.green_agent.agent import start_green_agent
+from src.green_agent.server import start_green_agent
 from src.white_agent.petsc_agent import start_white_agent
-from src.util.my_a2a import wait_agent_ready, send_message
+from src.util.a2a_comm import wait_agent_ready, send_message
 import os
-# from tools.petsc_mcp_servers.petsc_compile_run_mcp_server import main as mcp_main
+
 
 async def launch_evaluation():
+    """Launcher module - initiates and coordinates the evaluation process."""
     # start green agent
     print("Launching green agent...")
     green_address = ("localhost", 9001)

@@ -3,7 +3,7 @@
 import typer
 import asyncio
 
-from src.green_agent.agent import start_green_agent
+from src.green_agent.server import start_green_agent
 from src.white_agent.petsc_agent import start_white_agent
 from src.launcher import launch_evaluation
 

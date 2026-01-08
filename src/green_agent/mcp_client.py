@@ -10,6 +10,7 @@ import sys
 
 from requests import session
 
+
 class MCPClient:
     def __init__(self):
         # Initialize session and client objects
@@ -22,8 +23,8 @@ class MCPClient:
         Args:
             server_script_path: Path to the server script (.py or .js)
         """
-        is_python = server_script_path.endswith('.py')
-        is_js = server_script_path.endswith('.js')
+        is_python = server_script_path.endswith(".py")
+        is_js = server_script_path.endswith(".js")
         if not (is_python or is_js):
             raise ValueError("Server script must be a .py or .js file")
 
@@ -33,13 +34,17 @@ class MCPClient:
             args=[server_script_path],
             env={
                 "PETSC_DIR": os.getenv("PETSC_DIR"),
-                "PETSC_ARCH": os.getenv("PETSC_ARCH")
-            }
+                "PETSC_ARCH": os.getenv("PETSC_ARCH"),
+            },
         )
 
-        stdio_transport = await self.exit_stack.enter_async_context(stdio_client(server_params))
+        stdio_transport = await self.exit_stack.enter_async_context(
+            stdio_client(server_params)
+        )
         self.stdio, self.write = stdio_transport
-        self.session = await self.exit_stack.enter_async_context(ClientSession(self.stdio, self.write))
+        self.session = await self.exit_stack.enter_async_context(
+            ClientSession(self.stdio, self.write)
+        )
 
         await self.session.initialize()
 
@@ -49,8 +54,12 @@ class MCPClient:
         print("\nConnected to server with tools:", [tool.name for tool in self.tools])
 
     async def connect_to_remote_server(self, server_url: str):
-        read_stream, write_stream, _ = await self.exit_stack.enter_async_context(streamablehttp_client(server_url))
-        self.session = await self.exit_stack.enter_async_context(ClientSession(read_stream, write_stream))
+        read_stream, write_stream, _ = await self.exit_stack.enter_async_context(
+            streamablehttp_client(server_url)
+        )
+        self.session = await self.exit_stack.enter_async_context(
+            ClientSession(read_stream, write_stream)
+        )
 
         await self.session.initialize()
 
@@ -59,19 +68,19 @@ class MCPClient:
         self.tools = response.tools
         print("\nConnected to server with tools:", [tool.name for tool in self.tools])
 
-    async def run_bash_command(self, command: str, args: str = ''):
+    async def run_bash_command(self, command: str, args: str = ""):
         # support "upload_file filename" and "upload_file filename data"
-        if command == 'upload_file':
+        if command == "upload_file":
             if os.path.isfile(args):
                 filename = os.path.basename(args)
                 with open(args) as fd:
                     data = fd.read()
             else:
-                filename = args[0:args.find(' ')]
-                data = args[args.find(' '):]
-            args = {'filename': filename, 'data' : data}
+                filename = args[0 : args.find(" ")]
+                data = args[args.find(" ") :]
+            args = {"filename": filename, "data": data}
         elif args:
-            args = {'arg' : args}
+            args = {"arg": args}
         else:
             args = {}
 
@@ -79,15 +88,16 @@ class MCPClient:
             response = await self.session.call_tool(command, arguments=args)
         else:
             if args:
-                args['arg'] = command + ' ' + args['arg']
+                args["arg"] = command + " " + args["arg"]
             else:
-                args = {'arg': command}
-            response = await self.session.call_tool('run_bash_command', arguments=args)
+                args = {"arg": command}
+            response = await self.session.call_tool("run_bash_command", arguments=args)
         return response
 
     async def cleanup(self):
         """Clean up resources"""
         await self.exit_stack.aclose()
+
 
 async def main():
     if len(sys.argv) < 2:
@@ -106,6 +116,7 @@ async def main():
         print(result.content[0].text)
     finally:
         await client.cleanup()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -68,6 +68,7 @@ async def send_message(
     response = await client.send_message(request=req)
     return response
 
+
 def parse_tags(str_with_tags: str) -> Dict[str, str]:
     """the target str contains tags in the format of <tag_name> ... </tag_name>, parse them out and return a dict"""
 

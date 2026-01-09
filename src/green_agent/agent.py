@@ -73,14 +73,17 @@ async def benchmark_code_generation_agents(white_agent_url, mcp_client, max_num_
         await mcp_client.initialize()
         await mcp_client.upload_file(filename = file_path)
         await mcp_client.make(executable = pname)
-        await mcp_client.run_bash_command(string = './' + pname + ' ' + ' '.join(cli_args))
-        print(result.content[0].text) # use LLM as a judge
+        result = await mcp_client.run_bash_command(string = './' + pname + ' ' + cli_args)
+        # note is the string returned by running the bash command on the server it is not
+        # a response data structure from call_tool()
+        print(result)
+        #print(result.content[0].text) # use LLM as a judge
         # parse the action out
-        if result.isError:
-            success = 0
-        else:
-            success = 1
-        # success = parse_tags(white_text)
+        #if result.isError:
+        #    success = 0
+        #else:
+        #    success = 1
+        success = parse_tags(white_text)
     return {"success": success}
 
 

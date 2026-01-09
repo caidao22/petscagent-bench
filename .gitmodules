@@ -1,4 +1,0 @@
-[submodule "tools/petsc_mcp_servers"]
-	path = tools/petsc_mcp_servers
-	url = git@gitlab.com:caidao22/petsc_mcp_servers.git
-	branch = local_servers

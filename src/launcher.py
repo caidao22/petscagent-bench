@@ -60,6 +60,8 @@ You should use the following env configuration:
     print("Evaluation complete. Terminating agents...")
     p_green.terminate()
     p_green.join()
+    p_green_mcp.terminate()
+    p_green_mcp.join()
     p_white.terminate()
     p_white.join()
     print("Agents terminated.")

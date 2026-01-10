@@ -17,21 +17,6 @@ WIP code for agentifying petscagent-bench using A2A and MCP standards.
 │   └── petsc_mcp_servers
 ```
 
-## Cloning the Repository
-
-This repository includes a Git submodule.
-
-To clone the repository along with its submodule, use:
-```bash
-git clone --recursive <repo-url>
-```
-
-If you have already cloned the repository without the option `--recursive`, initialize and update the submodule by running the following command from the repository root:
-
-```bash
-git submodule update --init
-```
-
 ## Installation
 
 Install the required dependencies using `uv`:

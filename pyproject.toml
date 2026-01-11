@@ -13,6 +13,6 @@ dependencies = [
     "pathlib>=1.0.1",
     "typer>=0.19.2",
     "uvicorn>=0.37.0",
-    "petsc-mcp-servers-clients @ git+https://gitlab.com/petsc/petsc_mcp_servers.git@add-dynamic-client-methods",
+    "petsc-mcp-servers-clients @ git+https://gitlab.com/petsc/petsc_mcp_servers.git@main",
 
 ]

@@ -81,6 +81,8 @@ class PetscAgentExecutor(AgentExecutor):
             temperature=0.0,
         )
         content = response.choices[0].message.model_dump()["content"]
+        # remove ```json ``` wrapper that OpenAI includes in its response
+        content = content.replace('```json\n','').replace('```','')
         obj = json.loads(content)
         generated_code = obj["code"]
         cli_args = obj["cli_args"]

@@ -1,3 +1,4 @@
+import os
 import json
 import time
 from a2a.server.tasks import TaskUpdater
@@ -20,11 +21,15 @@ dotenv.load_dotenv()
 from petsc_compile_run_mcp_client import PetscCompileRunMCPClient
 
 
-def read_from_jsonl(file_path):
+def read_from_jsonl(path):
+    '''Reads all the test problems from a given directory'''
+    import pathlib
+    if not os.path.isdir(path): raise RuntimeError(f'Directory {path} does not exist')
     data = []
-    with open(file_path, "r", encoding="utf-8") as file:
-        for line in file:
-            data.append(json.loads(line.strip()))
+    for file in pathlib.Path(path).iterdir():
+      if not os.path.isfile(file): continue
+      with open(file, "r", encoding="utf-8") as fd:
+        data.append(json.loads(fd.read().strip()))
     return data
 
 
@@ -70,7 +75,7 @@ class Agent:
         }
 
         input_text = get_message_text(message)
-        data_file_path = Path("./data/problems_test.jsonl")
+        data_file_path = Path("./data")
         test_data = read_from_jsonl(data_file_path)
 
         for idx, data in enumerate(test_data, start=1):

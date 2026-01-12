@@ -1,10 +1,10 @@
 """purple agent implementation - the target agent being tested."""
-
+import argparse
 import uvicorn
 import dotenv
-import subprocess
 import os
-import shutil
+# import subprocess
+# import shutil
 import json
 from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
@@ -14,7 +14,7 @@ from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import AgentSkill, AgentCard, AgentCapabilities
 from a2a.utils import new_agent_text_message
 from litellm import completion
-
+from loguru import logger
 
 dotenv.load_dotenv()
 
@@ -53,7 +53,8 @@ def prepare_purple_agent_card(url):
 
 
 class PetscAgentExecutor(AgentExecutor):
-    def __init__(self):
+    def __init__(self, model: str):
+        self.model = model
         self.ctx_id_to_messages = {}
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
@@ -76,8 +77,8 @@ class PetscAgentExecutor(AgentExecutor):
         # 1. Generate PETSc code
         response = completion(
             messages=messages,
-            model="gemini/gemini-3-flash-preview",  # Switched to Gemini model
-            custom_llm_provider="gemini",  # Switched to Gemini provider
+            model=self.model,
+            # custom_llm_provider="openai",
             temperature=0.0,
         )
         content = response.choices[0].message.model_dump()["content"]
@@ -152,24 +153,45 @@ class PetscAgentExecutor(AgentExecutor):
     async def cancel(self, context, event_queue) -> None:
         raise NotImplementedError
 
+def start_purple_agent(host: str="localhost", port: int=9002, card_url: str=None, agent_llm: str="gemini/gemini-3-flash-preview"):
+    """
+    Start the Purple Agent A2A HTTP service.
 
-def start_purple_agent(agent_name="petsc_agent", host="localhost", port=9002):
-    print("Starting petsc agent...")
-    url = f"http://{host}:{port}"
-    card = prepare_purple_agent_card(url)
+    This sets up an A2A Starlette application backed by a `PetscAgentExecutor`,
+    an in-memory task store, and the default request handler, then serves it
+    via Uvicorn.
+
+    Args:
+        host: Interface to bind the HTTP server to.
+        port: Port to bind the HTTP server to.
+        card_url: Optional explicit URL used to build/advertise the agent card.
+            If not provided, a URL is constructed from `host` and `port`.
+        agent_llm: LLM identifier/config string passed to `PetscAgentExecutor`.
+
+    Notes:
+        Although declared `async`, this function starts a blocking Uvicorn server
+        (`uvicorn.run(...)`) and will not return until the server stops.
+
+    """
+    logger.info("Starting purple agent...")
+    card = prepare_purple_agent_card(card_url or f"http://{host}:{port}")
 
     request_handler = DefaultRequestHandler(
-        agent_executor=PetscAgentExecutor(),
+        agent_executor=PetscAgentExecutor(agent_llm),
         task_store=InMemoryTaskStore(),
     )
-
     app = A2AStarletteApplication(
         agent_card=card,
         http_handler=request_handler,
     )
-
     uvicorn.run(app.build(), host=host, port=port)
 
-
 if __name__ == "__main__":
-    start_purple_agent()
+    parser = argparse.ArgumentParser(description="Run the purple agent.")
+    parser.add_argument("--host", type=str, default="localhost", help="Host to bind the server")
+    parser.add_argument("--port", type=int, default=9002, help="Port to bind the server")
+    parser.add_argument("--card-url", type=str, help="External URL for the agent card")
+    parser.add_argument("--agent-llm", type=str, default="gemini/gemini-3-flash-preview", help="LLM model to use, such as gemini/gemini-3-flash-preview, gemini/gemini-2.5-flash, gpt-5.2")
+    args = parser.parse_args()
+
+    start_purple_agent(args.host, args.port, args.card_url, args.agent_llm)

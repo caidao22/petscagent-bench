@@ -1,4 +1,5 @@
 import multiprocessing
+import asyncio
 import json
 import mcp
 from src.green_agent.server import start_green_agent
@@ -13,41 +14,33 @@ from petsc_compile_run_mcp_server import main as start_mcp_server
 async def launch_evaluation():
     """Launcher module - initiates and coordinates the evaluation process."""
     # start green agent
+    green_url = "http://localhost:9001"
+    purple_url = "http://localhost:9002"
     print("Launching green agent...")
-    green_address = ("localhost", 9001)
-    green_url = f"http://{green_address[0]}:{green_address[1]}"
-    p_green = multiprocessing.Process(
-        target=start_green_agent, args=("green_agent", *green_address)
-    )
+    p_green = multiprocessing.Process(target=lambda: asyncio.run(start_green_agent()))
     p_green.start()
     assert await wait_agent_ready(green_url), "Green agent not ready in time"
     print("Green agent is ready.")
 
     # start purple agent
     print("Launching purple agent...")
-    purple_address = ("localhost", 9002)
-    purple_url = f"http://{purple_address[0]}:{purple_address[1]}"
-    p_purple = multiprocessing.Process(
-        target=start_purple_agent, args=("general_purple_agent", *purple_address)
-    )
+    p_purple = multiprocessing.Process(target=lambda: asyncio.run(start_purple_agent()))
     p_purple.start()
     assert await wait_agent_ready(purple_url), "purple agent not ready in time"
     print("purple agent is ready.")
 
      # start the MCP server for green agent
     print("Launching MCP server for green agent...")
-    green_mcp_server = multiprocessing.Process(
-        target=start_mcp_server, args=()
-    )
-    green_mcp_server.start()
-    print("MCP server is ready.")
+    petsc_mcp_server = multiprocessing.Process(target=start_mcp_server)
+    petsc_mcp_server.start()
+    print("PETSc MCP server is ready.")
 
     # send the task description
     print("Sending task description to green agent...")
     task_text = f"""
 Your task is to instantiate petscagent-bench to test the agent located at:
 <purple_agent_url>
-http://{purple_address[0]}:{purple_address[1]}/
+{purple_url}/
 </purple_agent_url>
 You should use the following env configuration:
     """
@@ -63,6 +56,7 @@ You should use the following env configuration:
     p_green.join()
     p_purple.terminate()
     p_purple.join()
-    green_mcp_server.terminate()
-    green_mcp_server.join()
     print("Agents terminated.")
+    petsc_mcp_server.terminate()
+    petsc_mcp_server.join()
+    print("PETSc MCP server terminated.")

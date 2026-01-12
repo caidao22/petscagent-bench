@@ -6,6 +6,7 @@ from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import AgentCard
 from .executor import GreenAgentExecutor
+from loguru import logger
 
 
 def load_agent_card_toml(agent_name):
@@ -13,29 +14,28 @@ def load_agent_card_toml(agent_name):
     with open(f"{current_dir}/{agent_name}.toml", "rb") as f:
         return tomllib.load(f)
 
+def start_green_agent(host: str="localhost", port: int=9001, card_url: str=None):
+    """Start the Green Agent A2A HTTP server.
 
-def start_green_agent(agent_name="green_agent", host="localhost", port=9001):
-    """
-    Start the Green Agent A2A HTTP server.
-
-    This function loads the agent card configuration from TOML, fills in required
-    card fields (e.g., the public URL), wires up the default A2A request handler
-    with a `GreenAgentExecutor` and an in-memory task store, builds the Starlette
-    application, and runs it via Uvicorn.
+    Loads the agent card configuration from ``green_agent.toml``, ensures the
+    required ``url`` field is populated (from ``card_url`` or
+    ``http://{host}:{port}``), wires up a :class:`~a2a.server.request_handlers.DefaultRequestHandler`
+    with :class:`~petscagent_bench.src.green_agent.executor.GreenAgentExecutor`
+    and an :class:`~a2a.server.tasks.InMemoryTaskStore`, then starts a Starlette
+    app via Uvicorn.
 
     Args:
-        agent_name (str): Name of the agent whose card/config should be loaded.
-        host (str): Interface to bind the HTTP server to.
-        port (int): TCP port to bind the HTTP server to.
+        host: Interface to bind the server to.
+        port: Port to bind the server to.
+        card_url: External URL to advertise in the agent card. If empty,
+            ``http://{host}:{port}`` is used.
 
-    Side Effects:
-        Starts a blocking Uvicorn server process serving the A2A endpoints.
+    Returns:
+        None
     """
-    print("Starting green agent...")
-
-    agent_card_dict = load_agent_card_toml(agent_name)
-    url = f"http://{host}:{port}"
-    agent_card_dict["url"] = url  # complete all required card fields
+    logger.info("Starting green agent...")
+    agent_card_dict = load_agent_card_toml("green_agent")
+    agent_card_dict["url"] = card_url or f"http://{host}:{port}" # complete all required card fields
     request_handler = DefaultRequestHandler(
         agent_executor=GreenAgentExecutor(),
         task_store=InMemoryTaskStore(),
@@ -46,6 +46,12 @@ def start_green_agent(agent_name="green_agent", host="localhost", port=9001):
     )
     uvicorn.run(server.build(), host=host, port=port)
 
-
 if __name__ == "__main__":
-    start_green_agent()
+    parser = argparse.ArgumentParser(description="Run the green agent.")
+    parser.add_argument("--host", type=str, default="localhost", help="Host to bind the server")
+    parser.add_argument("--port", type=int, default=9001, help="Port to bind the server")
+    parser.add_argument("--card-url", type=str, help="External URL for the agent card")
+    # parser.add_argument("--agent-llm", type=str, default="openai/gpt-4.1", help="LLM model to use")
+    args = parser.parse_args()
+
+    start_green_agent(args.host, args.port, args.card_url)

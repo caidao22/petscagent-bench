@@ -1,0 +1,17 @@
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm
+
+RUN adduser petscagent
+USER petscagent
+WORKDIR /home/petscagent/petscagent_bench
+
+COPY pyproject.toml ./
+COPY src src
+
+RUN \
+    --mount=type=cache,target=/home/petscagent/.cache/uv,uid=1000 \
+    uv sync
+
+ENTRYPOINT ["uv", "run", "src/green_agent/server.py"]
+CMD ["--host", "0.0.0.0"]
+EXPOSE 9001
+

@@ -1,0 +1,15 @@
+FROM ghcr.io/caidao22/petsc-docker-main:latest
+
+RUN adduser petscagent
+USER petscagent
+WORKDIR /home/petscagent
+
+RUN git clone https://gitlab.com/petsc/petsc_mcp_servers.git 
+WORKDIR /home/petscagent/petsc_mcp_servers
+
+RUN \
+  --mount=type=cache,target=/home/petscagent/.cache/pip,uid=1000 \
+  pip install --no-cache-dir fastmcp
+
+ENTRYPOINT ["python3", "petsc_compile_run_mcp_server.py"]
+EXPOSE 8080

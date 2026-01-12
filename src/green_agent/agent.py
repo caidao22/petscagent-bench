@@ -21,7 +21,7 @@ dotenv.load_dotenv()
 from petsc_compile_run_mcp_client import PetscCompileRunMCPClient
 
 
-def read_from_jsonl(path):
+def read_from_json(path):
     '''Reads all the test problems from a given directory'''
     import pathlib
     if not os.path.isdir(path): raise RuntimeError(f'Directory {path} does not exist')
@@ -76,7 +76,7 @@ class Agent:
 
         input_text = get_message_text(message)
         data_file_path = Path("./data")
-        test_data = read_from_jsonl(data_file_path)
+        test_data = read_from_json(data_file_path)
 
         for idx, data in enumerate(test_data, start=1):
             timestamp_started = time.time()

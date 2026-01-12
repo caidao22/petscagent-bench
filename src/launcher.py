@@ -11,20 +11,26 @@ import dotenv
 dotenv.load_dotenv()
 from petsc_compile_run_mcp_server import main as start_mcp_server
 
+def run_green_agent():
+    asyncio.run(start_green_agent())
+
+def run_purple_agent():
+    asyncio.run(start_purple_agent())
+
 async def launch_evaluation():
     """Launcher module - initiates and coordinates the evaluation process."""
     # start green agent
     green_url = "http://localhost:9001"
     purple_url = "http://localhost:9002"
     print("Launching green agent...")
-    p_green = multiprocessing.Process(target=lambda: asyncio.run(start_green_agent()))
+    p_green = multiprocessing.Process(target=run_green_agent)
     p_green.start()
     assert await wait_agent_ready(green_url), "Green agent not ready in time"
     print("Green agent is ready.")
 
     # start purple agent
     print("Launching purple agent...")
-    p_purple = multiprocessing.Process(target=lambda: asyncio.run(start_purple_agent()))
+    p_purple = multiprocessing.Process(target=run_purple_agent)
     p_purple.start()
     assert await wait_agent_ready(purple_url), "purple agent not ready in time"
     print("purple agent is ready.")

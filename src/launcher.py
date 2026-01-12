@@ -36,10 +36,10 @@ async def launch_evaluation():
 
      # start the MCP server for green agent
     print("Launching MCP server for green agent...")
-    mcp_server_process = multiprocessing.Process(
+    green_mcp_server = multiprocessing.Process(
         target=start_mcp_server, args=()
     )
-    mcp_server_process.start()
+    green_mcp_server.start()
     print("MCP server is ready.")
 
     # send the task description
@@ -63,4 +63,6 @@ You should use the following env configuration:
     p_green.join()
     p_purple.terminate()
     p_purple.join()
+    green_mcp_server.terminate()
+    green_mcp_server.join()
     print("Agents terminated.")

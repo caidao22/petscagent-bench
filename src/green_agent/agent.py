@@ -128,10 +128,10 @@ class Agent:
                 await self.mcp_client.initialize()
                 await self.mcp_client.upload_file(filename = file_path)
                 await self.mcp_client.make(executable = pname)
-                run_result = await self.mcp_client.run_bash_command(string = './' + pname + ' ' + cli_args)
-                print(run_result.content[0].text)  # use LLM as a judge
+                (result, response) = await self.mcp_client.run_executable(executable = pname, args = cli_args)
+                print(result)  # use LLM as a judge
 
-                br.is_error = run_result.isError
+                br.is_error = response.isError
                 br.success = not br.is_error
             except Exception as e:
                 br.is_error = True

@@ -91,7 +91,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           # Explicitly build for linux/amd64 (GitHub Actions default)
           platforms: linux/amd64
-          visibility: public   # <- this makes the GHCR image public
 
       - name: Output image digest
         if: github.event_name != 'pull_request'
@@ -104,28 +103,15 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Use this digest in your MANIFEST.json for reproducibility." >> $GITHUB_STEP_SUMMARY
 
-      - name: Cleanup old GHCR images
-        if: github.event_name != 'pull_request'
-        run: |
-          PACKAGE="${{ github.repository }}-${{ matrix.name }}"
-          echo "Cleaning up old versions of $PACKAGE..."
-
-          # List all package versions (ids only)
-          VERSIONS=$(gh api \
-            -H "Accept: application/vnd.github+json" \
-            /users/${GITHUB_REPOSITORY_OWNER}/packages/container/$PACKAGE/versions \
-            | jq -r '.[].id')
-
-          # Keep only the latest 1 version
-          KEEP=$(echo "$VERSIONS" | head -n 1)
-          DELETE=$(comm -23 <(echo "$VERSIONS") <(echo "$KEEP"))
-
-          for id in $DELETE; do
-            echo "Deleting old version $id"
-            gh api \
-              -X DELETE \
-              -H "Accept: application/vnd.github+json" \
-              /users/${GITHUB_REPOSITORY_OWNER}/packages/container/$PACKAGE/versions/$id
-          done
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: 'Clean up old GHCR images'
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          packages: petscagent-bench-${{ matrix.name }}
+          # Keep the latest 2 tagged images
+          keep-n-tagged: 2
+          # Delete all untagged images
+          delete-untagged: true
+          # Exclude specific tags from deletion (e.g., 'latest' or 'dev')
+          exclude-tags: dev,latest,pr*
+          # Define the Personal Access Token (PAT) for authentication
+          token: ${{ secrets.GITHUB_TOKEN }}

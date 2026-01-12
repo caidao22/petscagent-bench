@@ -76,8 +76,10 @@ class PetscAgentExecutor(AgentExecutor):
         # 1. Generate PETSc code
         response = completion(
             messages=messages,
-            model="gemini/gemini-3-flash-preview",  # Switched to Gemini model
-            custom_llm_provider="gemini",  # Switched to Gemini provider
+            #model="gemini/gemini-3-flash-preview",  # Switched to Gemini model
+            #custom_llm_provider="gemini",  # Switched to Gemini provider
+            model="openai/gpt-4o",
+            custom_llm_provider="openai",
             temperature=0.0,
         )
         content = response.choices[0].message.model_dump()["content"]

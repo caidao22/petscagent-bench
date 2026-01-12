@@ -16,6 +16,7 @@ from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import Any, Dict, List, Optional
 import dotenv
+import importlib
 dotenv.load_dotenv()
 
 from petsc_compile_run_mcp_client import PetscCompileRunMCPClient
@@ -32,6 +33,17 @@ def read_from_jsonl(path):
         data.append(json.loads(fd.read().strip()))
     return data
 
+def read_in_evaluators(path):
+    '''Reads all the evaluators from a given directory'''
+    import pathlib
+    if not os.path.isdir(path): raise RuntimeError(f'Directory {path} does not exist')
+    evaluators = []
+    for file in pathlib.Path(path).iterdir():
+      if not os.path.isfile(file): continue
+      imported_module = importlib.import_module(str(file).replace('/','.').replace('.py',''))
+      imported_class  = getattr(imported_module, os.path.basename(str(file)).replace('.py',''))
+      evaluators.append(imported_class())
+    return evaluators
 
 @dataclass
 class BenchmarkResult:
@@ -78,6 +90,9 @@ class Agent:
         data_file_path = Path("./data")
         test_data = read_from_jsonl(data_file_path)
 
+        evaluators = read_in_evaluators('./evaluators')
+        print(evaluators)
+
         for idx, data in enumerate(test_data, start=1):
             timestamp_started = time.time()
             pname = data["problem_name"]
@@ -118,11 +133,18 @@ class Agent:
                 purple_text = text_parts[0]
                 # br.purple_agent_text = purple_text
 
+                score     = 0
+                scoretext = ''
                 # (2) parse response
                 print(f"@@@ purple agent response:\n{purple_text}")
                 lines = purple_text.strip().splitlines()
                 file_path = lines[1].strip()
-                cli_args = lines[2].strip()
+                if len(lines) < 3:
+                  score     = score + 1
+                  scoretext = scoretext + 'Accessee did not provide command line arguments\n'
+                  cli_args  = '\n'
+                else:
+                  cli_args = lines[2].strip()
                 # br.file_path = file_path
                 # br.cli_args = cli_args
 
@@ -132,10 +154,20 @@ class Agent:
                 )
                 await self.mcp_client.initialize()
                 await self.mcp_client.upload_file(filename = file_path)
-                await self.mcp_client.make(executable = pname)
-                (result, response) = await self.mcp_client.run_executable(executable = pname, args = cli_args)
-                print(result)  # use LLM as a judge
 
+                (result, response) = await self.mcp_client.make(executable = pname)
+                for evaluator in evaluators:
+                  if evaluator.stage == 'compiler_output':
+                    (lscore, lscoretext) = evaluator.Evaluate(result, data)
+                    score     = score + lscore
+                    scoretext = scoretext + lscoretext
+
+                print(response)
+                if result.find('error:') == -1:
+                  (result, response) = await self.mcp_client.run_executable(executable = pname, args = cli_args)
+                  print(result)  # use LLM as a judge
+
+                print(f'Score {score}. Reason:\n{scoretext}')
                 br.is_error = response.isError
                 br.success = not br.is_error
             except Exception as e:

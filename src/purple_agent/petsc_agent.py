@@ -20,16 +20,15 @@ dotenv.load_dotenv()
 
 SYSTEM_CODE_CONTRACT = (
     "You are a code-generation agent.\n"
-    "You MUST output a single valid C source file.\n\n"
+    "You MUST output valid C/CUDA/Kokkos source files along with a makefile using PETSc makefile rules.\n\n"
     "Output contract (must follow exactly):\n"
-    "- Output JSON with 'code' (the full valid C code) and 'cli_args' (command line arguments, e.g. '-ts_type rosw -ts_monitor')\n"
+    "- Output JSON with 'code' (a list of tuples ('filename', 'filecontent') for source files including makefile), 'nsize' (number of MPI processes to run the code) and 'cli_args' (command line arguments, e.g. '-ts_type rosw -ts_monitor')\n"
     "- Any explanation MUST be inside a C block comment /* ... */\n"
     "- Do NOT use Markdown, backticks, LaTeX, or plain text outside comments\n"
-    "- The first non-comment line must be valid C\n"
-    "- The output must compile with a C compiler\n"
+    "- The first non-comment line must be valid C/C++ code\n"
+    "- The output makefile should be able to build the generated code\n"
     "- Violating this contract is a hard failure\n"
 )
-
 
 def prepare_purple_agent_card(url):
     skill = AgentSkill(
@@ -73,6 +72,12 @@ class PetscAgentExecutor(AgentExecutor):
                 "content": user_input,
             }
         )
+        messages.append(
+            {
+                "role": "user",
+                "content": f"The main file should be named {context.context_id} with an appropriate extension.",
+            }
+        )
 
         # 1. Generate PETSc code
         response = completion(
@@ -85,7 +90,8 @@ class PetscAgentExecutor(AgentExecutor):
         # remove ```json ``` wrapper that OpenAI includes in its response
         content = content.replace('```json\n','').replace('```','')
         obj = json.loads(content)
-        generated_code = obj["code"]
+        srcfiles = obj["code"]
+        nsize = obj["nsize"]
         cli_args = obj["cli_args"]
         # messages.append(
         #     {
@@ -95,14 +101,17 @@ class PetscAgentExecutor(AgentExecutor):
         # )
 
         # Create a unique working directory for this context
-        work_dir = "generated_codes"
+        work_dir = os.path.join("generated_codes", context.context_id)
         os.makedirs(work_dir, exist_ok=True)
 
         try:
             # 2. Save the generated code to a file inside the work_dir
-            source_filename = os.path.join(work_dir, f"{context.context_id}.c")
-            with open(source_filename, "w") as f:
-                f.write(generated_code)
+            source_filenames = ""
+            for filename, filecontent in srcfiles:
+              source_filename = os.path.join(work_dir, filename)
+              with open(source_filename, "w") as f:
+                f.write(filecontent)
+              source_filenames += source_filename + "\n"
 
             # 3. Copy the template makefile to the work_dir
             # Note: The makefile should be in a known location relative to the script.
@@ -142,7 +151,7 @@ class PetscAgentExecutor(AgentExecutor):
             await event_queue.enqueue_event(
                 new_agent_text_message(
                     # f"Execution successful:\n{run_result.stdout}",
-                    f"Execution successful:\n{source_filename}\n{cli_args}",
+                    f"Execution successful:{source_filenames}{nsize}\n{cli_args}",
                     context_id=context.context_id,
                 )
             )

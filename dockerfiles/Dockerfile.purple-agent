@@ -5,6 +5,7 @@ USER petscagent
 WORKDIR /home/petscagent/petscagent_bench
 
 COPY pyproject.toml ./
+COPY README.md ./
 COPY src src
 
 RUN \

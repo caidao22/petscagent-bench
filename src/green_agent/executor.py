@@ -13,7 +13,7 @@ from a2a.utils import (
     new_task,
 )
 from src.util.a2a_comm import parse_tags
-from .agent import Agent
+from src.green_agent.agent import Agent
 
 TERMINAL_STATES = {
     TaskState.completed,

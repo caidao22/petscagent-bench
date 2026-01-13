@@ -1,3 +1,15 @@
-{"problem_name": "Rosenbrock_banana_function",
- "problem_id": "3","problem_description": "Implement the 2d Rosenbrock Function optimization problem in PETSc/Tao as a complete, compilable C file. The objective function is:\n\nf(x,y) = (1 - x)^2 + 100 (y - x^2)^2\n\nUse the modern PetscCall() style of error checking\nInclude all necessary PETSc/Tao headers (e.g., petsctao.h).\n. Have a main function that:\n   - Initializes PETSc.\n   - Sets up the Tao optimizer.\n   - Computes the function minimum.\n   - Prints the final solution.\n",
- "test_cases":[{"args": "-tao_view -tao_monitor", "expected_output": [0, 0]}]}
+{
+  "problem_name": "Rosenbrock_banana_function",
+  "problem_id": "3",
+  "problem_description": "Implement the 2d Rosenbrock Function optimization problem in PETSc/Tao as a complete, compilable C file. The objective function is:\n\nf(x,y) = (1 - x)^2 + 100 (y - x^2)^2\n\nUse the modern PetscCall() style of error checking\nInclude all necessary PETSc/Tao headers (e.g., petsctao.h).\n. Have a main function that:\n   - Initializes PETSc.\n   - Sets up the Tao optimizer.\n   - Computes the function minimum.\n   - Prints the final solution.\n",
+  "test_cases": [
+    {
+      "nsize": "1",
+      "args": "-tao_view -tao_monitor",
+      "expected_output": [
+        0,
+        0
+      ]
+    }
+  ]
+}

@@ -7,6 +7,7 @@ WORKDIR /home/petscagent/petscagent_bench
 COPY pyproject.toml ./
 COPY README.md ./
 COPY src src
+COPY data data
 
 RUN \
     --mount=type=cache,target=/home/petscagent/.cache/uv,uid=1000 \

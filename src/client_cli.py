@@ -1,12 +1,8 @@
 import asyncio
 from src.util.a2a_comm import send_message
+import argparse
 
-async def main():
-    """Launcher module - initiates and coordinates the evaluation process."""
-    # start green agent
-    green_url = "http://localhost:9001"
-    purple_url = "http://localhost:9002"
-
+async def main(green_url: str="http://localhost:9001", purple_url: str="http//localhost:9002", mcp_server_url: str="http://localhost:8080/mcp"):
     # send the task description
     print("Sending task description to green agent...")
     task_text = f"""
@@ -14,7 +10,10 @@ Your task is to instantiate petscagent-bench to test the agent located at:
 <purple_agent_url>
 {purple_url}/
 </purple_agent_url>
-You should use the following env configuration:
+You can use MCP tools from:
+<mcp_server_url>
+{mcp_server_url}/
+</mcp_server_url>
     """
     print("Task description:")
     print(task_text)
@@ -24,4 +23,9 @@ You should use the following env configuration:
     print(response)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(description="Signal the green agent to start the benchmark.")
+    parser.add_argument("--green-url", type=str, default="http://localhost:9001", help="Green agent URL")
+    parser.add_argument("--purple-url", type=str, default="http://localhost:9002", help="Purple agent URL")
+    parser.add_argument("--mcp-server-url", type=str, default="http://localhost:8080/mcp", help="MCP server URL")
+    args = parser.parse_args()
+    asyncio.run(main(args.green_url, args.purple_url, args.mcp_server_url))

@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - main
-      - add-github-workflow
+      - dev
     tags:
       - 'v*' # Trigger on version tags
 

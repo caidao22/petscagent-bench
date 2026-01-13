@@ -1,12 +1,7 @@
 import asyncio
 from src.util.a2a_comm import send_message
 
-async def main():
-    """Launcher module - initiates and coordinates the evaluation process."""
-    # start green agent
-    green_url = "http://localhost:9001"
-    purple_url = "http://localhost:9002"
-
+async def main(green_url: str="http://localhost:9001", purple_url: str="http//localhost:9002"):
     # send the task description
     print("Sending task description to green agent...")
     task_text = f"""
@@ -24,4 +19,8 @@ You should use the following env configuration:
     print(response)
 
 if __name__ == "__main__":
-    asynio.run(main())
+    parser = argparse.ArgumentParser(description="Signal the green agent to start the benchmark.")
+    parser.add_argument("--green_url", type=str, default="http://localhost:9001", help="Green agent URL")
+    parser.add_argument("--purple_url", type=int, default="http://localhost:9002", help="Purple agent URL")
+    args = parser.parse_args()
+    asyncio.run(main(args.green_url, args.purple_url))

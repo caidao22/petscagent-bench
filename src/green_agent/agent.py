@@ -52,10 +52,10 @@ class BenchmarkResult:
 
 
 class Agent:
-    def __init__(self, purple_agent_url, mcp_server_url, max_num_steps=1):
+    def __init__(self, purple_agent_url, mcp_server_url, max_num_prob=None):
         self.purple_agent_url = purple_agent_url
         self.mcp_client = PetscCompileRunMCPClient(mcp_server_url)
-        self.max_num_steps = max_num_steps
+        self.max_num_prob = max_num_prob
         self.metrics = {}
         # Initialize state here
 
@@ -81,8 +81,8 @@ class Agent:
         input_text = get_message_text(message)
         data_file_path = Path("./data")
         test_data = read_from_json(data_file_path)
-
-        for idx, data in enumerate(test_data, start=1):
+        limit = self.max_num_prob or len(test_data)
+        for idx, data in enumerate(test_data[:limit], start=1):
             timestamp_started = time.time()
             pname = data["problem_name"]
             pid = data["problem_id"]

@@ -24,4 +24,4 @@ You should use the following env configuration:
     print(response)
 
 if __name__ == "__main__":
-    asynio.run(main())
+    asyncio.run(main())

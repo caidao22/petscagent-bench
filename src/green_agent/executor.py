@@ -34,12 +34,14 @@ class GreenAgentExecutor(AgentExecutor):
         tags = parse_tags(user_input)
         purple_agent_url = tags["purple_agent_url"]
         mcp_server_url = tags["mcp_server_url"]
-
         # create a new task
         task = new_task(context.message)
         await event_queue.enqueue_event(task)
         context_id = task.context_id
         agent = Agent(purple_agent_url=purple_agent_url, mcp_server_url=mcp_server_url)
+        # for debugging
+        # max_num_prob = 1
+        # agent = Agent(purple_agent_url=purple_agent_url, mcp_server_url=mcp_server_url, max_num_prob=max_num_prob)
         self.agents[context_id] = agent
         agent = self.agents.get(context_id)
         updater = TaskUpdater(event_queue, task.id, context_id)

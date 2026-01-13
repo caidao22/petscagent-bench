@@ -33,12 +33,13 @@ class GreenAgentExecutor(AgentExecutor):
         user_input = context.get_user_input()
         tags = parse_tags(user_input)
         purple_agent_url = tags["purple_agent_url"]
+        mcp_server_url = tags["mcp_server_url"]
 
         # create a new task
         task = new_task(context.message)
         await event_queue.enqueue_event(task)
         context_id = task.context_id
-        agent = Agent(purple_agent_url=purple_agent_url, mcp_server_url='http://localhost:8080/mcp')
+        agent = Agent(purple_agent_url=purple_agent_url, mcp_server_url=mcp_server_url)
         self.agents[context_id] = agent
         agent = self.agents.get(context_id)
         updater = TaskUpdater(event_queue, task.id, context_id)

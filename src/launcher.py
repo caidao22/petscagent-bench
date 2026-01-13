@@ -22,6 +22,7 @@ async def launch_evaluation():
     # start green agent
     green_url = "http://localhost:9001"
     purple_url = "http://localhost:9002"
+    mcp_server_url = "http://localhost:8080/mcp"
     print("Launching green agent...")
     p_green = multiprocessing.Process(target=run_green_agent)
     p_green.start()
@@ -48,7 +49,10 @@ Your task is to instantiate petscagent-bench to test the agent located at:
 <purple_agent_url>
 {purple_url}/
 </purple_agent_url>
-You should use the following env configuration:
+You can use MCP tools from:
+<mcp_server_url>
+{mcp_server_url}/
+</mcp_server_url>
     """
     print("Task description:")
     print(task_text)

@@ -34,7 +34,7 @@ class GreenAgentExecutor(AgentExecutor):
         tags = parse_tags(user_input)
         purple_agent_url = tags["purple_agent_url"]
         mcp_server_url = tags["mcp_server_url"]
-        # max_num_prob = 1 # for debugging
+        max_num_prob = 1 # for debugging
         # create a new task
         task = new_task(context.message)
         await event_queue.enqueue_event(task)

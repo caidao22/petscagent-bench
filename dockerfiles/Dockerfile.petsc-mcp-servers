@@ -12,5 +12,5 @@ RUN \
   pip install --no-cache-dir fastmcp
 
 # ENTRYPOINT ["sh", "-c", "echo '=== ENV ==='; env; echo '=== FILES ==='; ls -lah; python petsc_compile_run_mcp_server.py"] # for debug
-ENTRYPOINT ["sh", "-c", "echo '=== ENV ==='; env; echo '=== FILES ==='; ls -lah; python petsc_compile_run_mcp_server.py"]
+ENTRYPOINT ["sh", "-c", "echo '=== ENV ==='; env; echo '=== FILES ==='; ls -lah; cat petsc_compile_run_mcp_server.py; python petsc_compile_run_mcp_server.py"]
 EXPOSE 8080

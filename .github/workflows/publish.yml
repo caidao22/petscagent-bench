@@ -8,6 +8,7 @@ on:
       - add-github-workflow
     tags:
       - 'v*' # Trigger on version tags
+  workflow_dispatch:
 
 jobs:
   publish:

@@ -89,13 +89,11 @@ Provide:
 
 Return as JSON.
 """
-        
         try:
             response = await self.llm.structured_completion(
                 prompt=prompt,
                 response_model=AlgorithmResponse
             )
-            print("algorithm", response.feedback)
             return EvaluationResult(
                 evaluator_name=self.name,
                 evaluator_type=self.evaluator_type,

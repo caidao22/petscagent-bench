@@ -46,27 +46,6 @@ class EvaluationResult:
     execution_time_ms: float = 0.0
 
 
-@dataclass
-class EvaluationConfig:
-    """Configuration for evaluation pipeline."""
-    
-    # What to enable
-    enable_gates: bool = True
-    enable_metrics: bool = True
-    enable_quality: bool = True
-    
-    # LLM settings
-    llm_model: str = "gpt-4o-mini"
-    llm_temperature: float = 0.3
-    max_concurrent_llm_calls: int = 3
-    
-    # Thresholds
-    min_llm_confidence: float = 0.7
-    
-    # Performance
-    parallel_evaluation: bool = True
-
-
 class Evaluator(ABC):
     """Base class for all evaluators."""
     

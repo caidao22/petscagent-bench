@@ -4,7 +4,7 @@ import asyncio
 import json
 from pathlib import Path
 
-from src.evaluators import EvaluationPipeline, EvaluationConfig
+from src.evaluators import EvaluationPipeline
 from src.metrics import MetricsAggregator
 
 
@@ -68,14 +68,35 @@ int main(int argc, char **argv) {
         'memory_mb': 50.0,
     }
     
-    # Create evaluation pipeline
-    config = EvaluationConfig(
-        enable_gates=True,
-        enable_metrics=True,
-        enable_quality=True,
-        llm_model='gpt-4o-mini',
-        parallel_evaluation=True,
-    )
+    # Create evaluation configuration
+    config = {
+        'evaluation': {
+            'enable_gates': True,
+            'enable_metrics': True,
+            'enable_quality': True,
+            'llm': {
+                'model': 'gpt-4o-mini',
+                'temperature': 0.3,
+                'max_concurrent_calls': 3,
+            },
+            'parallel_evaluation': True,
+        },
+        'scoring': {
+            'weights': {
+                'correctness': 0.35,
+                'performance': 0.15,
+                'code_quality': 0.15,
+                'algorithm': 0.15,
+                'petsc': 0.10,
+                'semantic': 0.10,
+            },
+            'tiers': {
+                'gold': 85,
+                'silver': 70,
+                'bronze': 50,
+            },
+        },
+    }
     
     pipeline = EvaluationPipeline(config)
     
@@ -90,7 +111,7 @@ int main(int argc, char **argv) {
     print("="*60)
     
     # Aggregate results
-    aggregator = MetricsAggregator()
+    aggregator = MetricsAggregator(config)
     aggregated = aggregator.aggregate(results)
     
     # Print summary

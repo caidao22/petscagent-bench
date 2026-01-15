@@ -25,7 +25,7 @@ dotenv.load_dotenv()
 from petsc_compile_run_mcp_client import PetscCompileRunMCPClient
 
 # Import evaluation system
-from src.evaluators import EvaluationPipeline, EvaluationConfig
+from src.evaluators import EvaluationPipeline
 from src.metrics import MetricsAggregator
 
 
@@ -42,6 +42,71 @@ def read_from_json(path):
         with open(file, "r", encoding="utf-8") as fd:
             data.append(json.loads(fd.read().strip()))
     return data
+
+
+def load_evaluation_config(config_path: str = "config/evaluation_config.yaml") -> Dict[str, Any]:
+    """Load evaluation configuration from file or use defaults.
+
+    Supports both JSON and YAML formats. Format is auto-detected by file extension.
+
+    Args:
+        config_path: Path to the configuration file
+
+    Returns:
+        Configuration dictionary
+    """
+    config_file = Path(config_path)
+
+    if config_file.exists():
+        try:
+            with open(config_file, 'r') as f:
+                # Detect format by extension
+                if config_file.suffix.lower() in ['.yaml', '.yml']:
+                    import yaml
+                    config_data = yaml.safe_load(f)
+                else:
+                    config_data = json.load(f)
+
+            print(f"@@@ Green agent: ✅ Loaded evaluation config from {config_path}")
+            return config_data
+        except Exception as e:
+            print(f"@@@ Green agent: ⚠️ Failed to load config from {config_path}: {e}")
+            print(f"@@@ Green agent: Using default evaluation configuration")
+    else:
+        print(f"@@@ Green agent: Config file {config_path} not found, using defaults")
+
+    # Fall back to default configuration
+    return {
+        'evaluation': {
+            'enable_gates': True,
+            'enable_metrics': True,
+            'enable_quality': True,
+            'llm': {
+                'model': 'openai/gpt-4o-mini',
+                'temperature': 0.3,
+                'max_concurrent_calls': 3,
+            },
+            'parallel_evaluation': True,
+            'thresholds': {
+                'min_llm_confidence': 0.7,
+            },
+        },
+        'scoring': {
+            'weights': {
+                'correctness': 0.35,
+                'performance': 0.15,
+                'code_quality': 0.15,
+                'algorithm': 0.15,
+                'petsc': 0.10,
+                'semantic': 0.10,
+            },
+            'tiers': {
+                'gold': 85,
+                'silver': 70,
+                'bronze': 50,
+            },
+        },
+    }
 
 
 @dataclass
@@ -79,18 +144,11 @@ class Agent():
         self.cache_dir = Path("./purple_agent_cache")
         self.cache_dir.mkdir(exist_ok=True)
 
-        # Initialize evaluation system
-        eval_config = EvaluationConfig(
-            enable_gates=True,
-            enable_metrics=True,
-            enable_quality=True,  # Set to False to disable LLM-based evaluation
-            llm_model="openai/gpt-5.2",
-            llm_temperature=0.3,
-            max_concurrent_llm_calls=3,
-            parallel_evaluation=True,
-        )
+        # Initialize evaluation system with config from file or defaults
+        eval_config = load_evaluation_config()
+        self.eval_config = eval_config
         self.evaluation_pipeline = EvaluationPipeline(eval_config)
-        self.metrics_aggregator = MetricsAggregator()
+        self.metrics_aggregator = MetricsAggregator(eval_config)
         print(f"@@@ Green agent: ✅ Evaluation system initialized with {self.evaluation_pipeline.get_evaluator_count()['total']} evaluators")
 
     def _get_cache_path(self, problem_name: str) -> Path:
@@ -171,15 +229,6 @@ class Agent():
             generated_codes = []
 
             try:
-                # print(
-                #     f"@@@ Green agent: Sending message to purple agent... -->\n{pdesc}"
-                # )
-                # # (1) send task description to purple agent and get generated code
-                # purple_agent_response = await send_message(
-                #     self.purple_agent_url,
-                #     pdesc,
-                #     context_id=pname,
-                # )
                 # Try to load from cache first
                 purple_agent_response = None
                 if self.use_cache:
@@ -252,7 +301,6 @@ class Agent():
                     else:
                         br.stderr = result
                         br.runs = False
-                    print(result)
             except Exception as e:
                 br.stdout = f"{type(e).__name__}: {e}"
                 br.runs = False
@@ -302,7 +350,7 @@ class Agent():
             metadata=summary,
         )
 
-        # # Create evaluation summary report
+        # Create evaluation summary report
         await self._create_evaluation_report(results, summary, updater)
 
         await updater.update_status(
@@ -463,3 +511,8 @@ class Agent():
             name="evaluation_detailed_report.json",
             parts=[TextPart(text=json.dumps(detailed_report, indent=2))],
         )
+
+
+
+
+

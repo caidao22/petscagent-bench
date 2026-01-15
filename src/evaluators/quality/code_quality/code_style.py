@@ -114,7 +114,6 @@ Return as JSON.
                 prompt=prompt,
                 response_model=CodeStyleResponse
             )
-            print("code_style", response.feedback)
             return {
                 'score': response.score / 10.0,
                 'confidence': response.confidence,

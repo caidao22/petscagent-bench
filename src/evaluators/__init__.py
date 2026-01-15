@@ -12,7 +12,6 @@ from .base import (
     Evaluator,
     EvaluatorType,
     EvaluationResult,
-    EvaluationConfig,
 )
 from .pipeline import EvaluationPipeline
 
@@ -20,6 +19,5 @@ __all__ = [
     'Evaluator',
     'EvaluatorType',
     'EvaluationResult',
-    'EvaluationConfig',
     'EvaluationPipeline',
 ]

@@ -3,7 +3,7 @@
 import asyncio
 from typing import List, Dict, Any, Optional
 
-from .base import Evaluator, EvaluatorType, EvaluationResult, EvaluationConfig
+from .base import Evaluator, EvaluatorType, EvaluationResult
 
 # Import all evaluators
 from .gates import (
@@ -41,24 +41,32 @@ class EvaluationPipeline:
     3. Quality (assessments) - run with LLM rate limiting
     """
     
-    def __init__(self, config: Optional[EvaluationConfig] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         """Initialize evaluation pipeline.
         
         Args:
-            config: Configuration for the pipeline
+            config: Configuration dictionary loaded from YAML/JSON
         """
-        self.config = config or EvaluationConfig()
+        self.config = config or {}
         self.gates: List[Evaluator] = []
         self.metrics: List[Evaluator] = []
         self.quality: List[Evaluator] = []
         
         self._setup_evaluators()
     
+    def _get_eval_config(self, key: str, default: Any = None) -> Any:
+        """Get value from evaluation config section."""
+        return self.config.get('evaluation', {}).get(key, default)
+    
+    def _get_llm_config(self, key: str, default: Any = None) -> Any:
+        """Get value from LLM config section."""
+        return self.config.get('evaluation', {}).get('llm', {}).get(key, default)
+    
     def _setup_evaluators(self):
         """Initialize evaluators based on configuration."""
         
         # Gates (always enabled - these are critical)
-        if self.config.enable_gates:
+        if self._get_eval_config('enable_gates', True):
             self.gates = [
                 CompilationGate(),
                 ExecutionGate(),
@@ -67,17 +75,17 @@ class EvaluationPipeline:
             ]
         
         # Metrics (deterministic measurements)
-        if self.config.enable_metrics:
+        if self._get_eval_config('enable_metrics', True):
             self.metrics = [
                 NumericalAccuracyMetric(),
                 ExecutionTimeMetric(),
             ]
         
         # Quality evaluators
-        if self.config.enable_quality:
+        if self._get_eval_config('enable_quality', True):
             llm_config = {
-                'llm_model': self.config.llm_model,
-                'llm_temperature': self.config.llm_temperature,
+                'llm_model': self._get_llm_config('model', 'gpt-4o-mini'),
+                'llm_temperature': self._get_llm_config('temperature', 0.3),
                 'use_llm': True,
             }
             
@@ -114,10 +122,11 @@ class EvaluationPipeline:
             List of evaluation results from all evaluators
         """
         all_results: List[EvaluationResult] = []
+        parallel = self._get_eval_config('parallel_evaluation', True)
         
         # Phase 1: Gates (must all pass to continue)
         print("Phase 1: Running gate evaluators...")
-        if self.config.parallel_evaluation:
+        if parallel:
             gate_results = await asyncio.gather(*[
                 gate.evaluate(code, problem, execution_result)
                 for gate in self.gates
@@ -142,7 +151,7 @@ class EvaluationPipeline:
         
         # Phase 2: Metrics (parallel - all deterministic)
         print("Phase 2: Running metric evaluators...")
-        if self.config.parallel_evaluation:
+        if parallel:
             metric_results = await asyncio.gather(*[
                 metric.evaluate(code, problem, execution_result)
                 for metric in self.metrics
@@ -162,7 +171,7 @@ class EvaluationPipeline:
         non_llm_quality = [q for q in self.quality if 'llm' not in q.evaluation_method]
         # Non-LLM quality (can run in parallel, fast)
         if non_llm_quality:
-            if self.config.parallel_evaluation:
+            if parallel:
                 non_llm_results = await asyncio.gather(*[
                     q.evaluate(code, problem, execution_result)
                     for q in non_llm_quality
@@ -177,7 +186,8 @@ class EvaluationPipeline:
         
         # LLM quality (rate-limited)
         if llm_quality:
-            semaphore = asyncio.Semaphore(self.config.max_concurrent_llm_calls)
+            max_concurrent = self._get_llm_config('max_concurrent_calls', 3)
+            semaphore = asyncio.Semaphore(max_concurrent)
             
             async def rate_limited_eval(evaluator: Evaluator) -> EvaluationResult:
                 async with semaphore:

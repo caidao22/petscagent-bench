@@ -1,6 +1,6 @@
 """Metrics aggregation logic."""
 
-from typing import List, Dict
+from typing import List, Dict, Any, Optional
 import statistics
 
 from src.evaluators.base import EvaluationResult, EvaluatorType
@@ -10,14 +10,34 @@ from .types import AggregatedMetrics, CategoryScores
 class MetricsAggregator:
     """Aggregates evaluation results into final metrics."""
     
-    # Weights for final composite score
-    CATEGORY_WEIGHTS = {
-        'correctness': 0.40,
-        'performance': 0.20,
-        'code_quality': 0.15,
-        'algorithm': 0.15,
-        'petsc': 0.10,
-    }
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """Initialize aggregator with configuration.
+        
+        Args:
+            config: Configuration dictionary (same as evaluation config)
+        """
+        self.config = config or {}
+        
+        # Load weights from config or use defaults
+        scoring_config = self.config.get('scoring', {})
+        weights_config = scoring_config.get('weights', {})
+        
+        self.CATEGORY_WEIGHTS = {
+            'correctness': weights_config.get('correctness', 0.35),
+            'performance': weights_config.get('performance', 0.15),
+            'code_quality': weights_config.get('code_quality', 0.15),
+            'algorithm': weights_config.get('algorithm', 0.15),
+            'petsc': weights_config.get('petsc', 0.10),
+            'semantic': weights_config.get('semantic', 0.10),
+        }
+        
+        # Load tier thresholds from config or use defaults
+        tiers_config = scoring_config.get('tiers', {})
+        self.TIER_THRESHOLDS = {
+            'GOLD': tiers_config.get('gold', 85),
+            'SILVER': tiers_config.get('silver', 70),
+            'BRONZE': tiers_config.get('bronze', 50),
+        }
     
     # Mapping of evaluator names to categories
     EVALUATOR_CATEGORY_MAP = {
@@ -40,13 +60,6 @@ class MetricsAggregator:
         'petsc_best_practices': 'petsc',
         'error_handling': 'petsc',
         'parallel_awareness': 'petsc',
-    }
-    
-    # Tier thresholds
-    TIER_THRESHOLDS = {
-        'GOLD': 85,
-        'SILVER': 70,
-        'BRONZE': 50,
     }
     
     def aggregate(self, results: List[EvaluationResult]) -> AggregatedMetrics:

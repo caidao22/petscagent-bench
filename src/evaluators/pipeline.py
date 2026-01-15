@@ -7,6 +7,7 @@ from .base import Evaluator, EvaluatorType, EvaluationResult, EvaluationConfig
 
 # Import all evaluators
 from .gates import (
+    CompilationGate,
     ExecutionGate,
     MemorySafetyGate,
     APIUsageGate,
@@ -59,6 +60,7 @@ class EvaluationPipeline:
         # Gates (always enabled - these are critical)
         if self.config.enable_gates:
             self.gates = [
+                CompilationGate(),
                 ExecutionGate(),
                 MemorySafetyGate(),
                 APIUsageGate(),

@@ -2,6 +2,7 @@ import os
 import json
 import time
 import re
+import pickle
 from a2a.server.tasks import TaskUpdater
 from a2a.types import (
     Message,
@@ -47,15 +48,12 @@ def read_from_json(path):
 class BenchmarkResult:
     problem_name: str
     problem_id: str
-    success: bool
+    runs: bool
     time_used_sec: float
-    is_error: bool
-    error_message: Optional[str] = None
+    compiles: bool
     stdout: Optional[str] = None
-    purple_agent_text: Optional[str] = None
-    file_path: Optional[str] = None
+    stderr: Optional[str] = None
     cli_args: Optional[str] = None
-
     # Evaluation fields
     composite_score: Optional[float] = None  # 0-100
     tier: Optional[str] = None  # GOLD/SILVER/BRONZE/FAIL
@@ -70,18 +68,23 @@ class Agent():
 
     The agent distributes test tasks to participant agents, collects their responses, and reports the results.
     """
-    def __init__(self, purple_agent_url, mcp_server_url, max_num_prob=None):
+    def __init__(self, purple_agent_url, mcp_server_url, max_num_prob=None, use_cache=True):
         self.purple_agent_url = purple_agent_url
         self.mcp_client = PetscCompileRunMCPClient(mcp_server_url)
         self.max_num_prob = max_num_prob
         self.metrics = {}
+        self.use_cache = use_cache
+
+        # Create cache directory
+        self.cache_dir = Path("./purple_agent_cache")
+        self.cache_dir.mkdir(exist_ok=True)
 
         # Initialize evaluation system
         eval_config = EvaluationConfig(
             enable_gates=True,
             enable_metrics=True,
             enable_quality=True,  # Set to False to disable LLM-based evaluation
-            llm_model=os.getenv("EVALUATION_LLM_MODEL", "gpt-4o-mini"),
+            llm_model="openai/gpt-5.2",
             llm_temperature=0.3,
             max_concurrent_llm_calls=3,
             parallel_evaluation=True,
@@ -89,6 +92,36 @@ class Agent():
         self.evaluation_pipeline = EvaluationPipeline(eval_config)
         self.metrics_aggregator = MetricsAggregator()
         print(f"✅ Evaluation system initialized with {self.evaluation_pipeline.get_evaluator_count()['total']} evaluators")
+
+    def _get_cache_path(self, problem_name: str) -> Path:
+        """Get the cache file path for a given problem."""
+        # Sanitize problem name for filename
+        safe_name = re.sub(r'[^\w\-_]', '_', problem_name)
+        return self.cache_dir / f"{safe_name}.pkl"
+
+    def _load_cached_response(self, problem_name: str):
+        """Load cached purple agent response if it exists."""
+        cache_path = self._get_cache_path(problem_name)
+        if cache_path.exists():
+            try:
+                with open(cache_path, 'rb') as f:
+                    cached_data = pickle.load(f)
+                print(f"✅ Loaded cached response for {problem_name}")
+                return cached_data
+            except Exception as e:
+                print(f"⚠️ Failed to load cache for {problem_name}: {e}")
+                return None
+        return None
+
+    def _save_cached_response(self, problem_name: str, response):
+        """Save purple agent response to cache."""
+        cache_path = self._get_cache_path(problem_name)
+        try:
+            with open(cache_path, 'wb') as f:
+                pickle.dump(response, f)
+            print(f"💾 Cached response for {problem_name}")
+        except Exception as e:
+            print(f"⚠️ Failed to save cache for {problem_name}: {e}")
 
     async def run(self, message: Message, updater: TaskUpdater) -> None:
         """Green agent implementation - manages assessment and evaluation.
@@ -104,7 +137,7 @@ class Agent():
         results: List[BenchmarkResult] = []
         summary: Dict[str, Any] = {
             "total": 0,
-            "success_count": 0,
+            "runs_count": 0,
             "failure_count": 0,
             "avg_time_sec": None,
             "avg_composite_score": None,
@@ -130,110 +163,125 @@ class Agent():
             br = BenchmarkResult(
                 problem_name=pname,
                 problem_id=pid,
-                success=False,
+                runs=False,
                 time_used_sec=0.0,
-                is_error=False,
+                compiles=False,
             )
 
-            generated_code = None
+            generated_codes = []
             execution_stdout = None
             execution_stderr = None
 
             try:
-                print(
-                    f"@@@ Green agent: Sending message to purple agent... -->\n{pdesc}"
-                )
-                # (1) send task description to purple agent and get generated code
-                purple_agent_response = await send_message(
-                    self.purple_agent_url,
-                    pdesc,
-                    context_id=pname,
-                )
+                # print(
+                #     f"@@@ Green agent: Sending message to purple agent... -->\n{pdesc}"
+                # )
+                # # (1) send task description to purple agent and get generated code
+                # purple_agent_response = await send_message(
+                #     self.purple_agent_url,
+                #     pdesc,
+                #     context_id=pname,
+                # )
+                # Try to load from cache first
+                purple_agent_response = None
+                if self.use_cache:
+                    purple_agent_response = self._load_cached_response(pname)
+
+                # If no cache, call the purple agent
+                if purple_agent_response is None:
+                    print(
+                        f"@@@ Green agent: Sending message to purple agent... -->\n{pdesc}"
+                    )
+                    purple_agent_response = await send_message(
+                        self.purple_agent_url,
+                        pdesc,
+                        context_id=pname,
+                    )
+                    # Cache the response
+                    if self.use_cache:
+                        self._save_cached_response(pname, purple_agent_response)
+                else:
+                    print(f"@@@ Green agent: Using cached response for {pname}")
+
                 res_root = purple_agent_response.root
                 assert isinstance(res_root, SendMessageSuccessResponse)
                 res_result = res_root.result
-                print("res_result", res_result)
-                assert isinstance(
-                    res_result, Message
-                )  # though, a robust design should also support Task
+                assert isinstance(res_result, Message)
                 text_list = get_text_parts(res_result.parts)
                 file_list = get_file_parts(res_result.parts)
                 assert (
                     len(text_list) == 1
                 ), "Expecting exactly one text part from the purple agent"
-                purple_text = text_list[0]
-                br.purple_agent_text = purple_text
-
-                # Ensure output folder exists
-                out_path = Path("./generated_codes")
-                out_path.mkdir(exist_ok=True)
-
                 # Parse response to find code
                 _PATTERN = re.compile(
-                    r"^Code generation successful[^\n]*\n"
+                    r"^Code generation runsful[^\n]*\n"
                     r"cli_args:\s*(?P<cli_args>[^\n]+)\n",
                     re.DOTALL,
                 )
-                m = _PATTERN.search(purple_text)
+                m = _PATTERN.search(text_list[0])
                 if not m:
                     raise ValueError(
                         "Could not parse purple agent response. Probably failed to generate the code."
                     )
                 cli_args = m.group("cli_args")
                 br.cli_args = cli_args
+
                 # (2) build and run
                 print(
                     f"@@@ Green agent: Compile and run the code generated by purple agent..."
                 )
+                # Ensure output folder exists
+                out_path = Path("./generated_codes")
+                out_path.mkdir(exist_ok=True)
                 await self.mcp_client.initialize()
                 for f in file_list:
-                    print("f type", type(f.bytes))
-                    print("file name ", f.name)
+                    generated_codes.append(f.bytes)
                     # Save to local file
                     local_file = out_path / f.name
                     local_file.write_text(f.bytes)
                     await self.mcp_client.upload_file(filename=local_file)
-                await self.mcp_client.make(executable=pname)
-                (result, response) = await self.mcp_client.run_executable(
-                    executable=pname, args=cli_args
-                )
-                execution_stdout = result
-                execution_stderr = getattr(response, 'stderr', '')
+                (_, response) = await self.mcp_client.make(executable=pname)
+                if response.isError:
+                    br.compiles = False
+                    br.runs = False
+                else:
+                    br.compiles = True
+                    (result, response) = await self.mcp_client.run_executable(
+                        executable=pname, args=cli_args
+                    )
+                    if not response.isError:
+                        br.stderr = result
+                        br.runs = True
+                    else:
+                        br.stdout = result
+                        br.runs = False
                 print(result)
-                br.is_error = response.isError
-                br.success = not br.is_error
-                br.stdout = result
             except Exception as e:
-                br.is_error = True
-                br.success = False
-                br.error_message = f"{type(e).__name__}: {e}"
-                execution_stderr = str(e)
+                br.stdout = f"{type(e).__name__}: {e}"
+                br.runs = False
             finally:
                 await self.mcp_client.finalize()
                 br.time_used_sec = time.time() - timestamp_started
 
                 # Run evaluation system
-                if generated_code is not None:
+                if not generated_codes:
                     print(f"@@@ Green agent: Evaluating generated code...")
-                    await self._evaluate_code(br, data, generated_code, execution_stdout, execution_stderr)
+                    await self._evaluate_code(br, data, generated_codes)
                 results.append(br)
                 # Update rolling summary
                 summary["total"] += 1
-                if br.success:
-                    summary["success_count"] += 1
+                if br.runs:
+                    summary["runs_count"] += 1
                 else:
                     summary["failure_count"] += 1
-
                 # Update evaluation summary
                 if br.tier:
                     summary["tier_distribution"][br.tier] += 1
-
                 # Optional: per-case artifact (useful for debugging)
                 await updater.add_artifact(
                     name=f"benchmark_result_{pname}.json",
                     parts=[TextPart(text=json.dumps(asdict(br), indent=2))],
                 )
-
         # Final summary artifact
         times = [r.time_used_sec for r in results]
         summary["avg_time_sec"] = (sum(times) / len(times)) if times else None
@@ -263,8 +311,7 @@ class Agent():
         await updater.update_status(
             TaskState.completed,
             new_agent_text_message(
-
-                f"Done. {summary['success_count']}/{summary['total']} succeeded. "
+                f"Done. {summary['runs_count']}/{summary['total']} succeeded. "
                 f"Avg score: {summary.get('avg_composite_score', 0):.1f}/100"
             ),
         )
@@ -273,43 +320,33 @@ class Agent():
         self,
         benchmark_result: BenchmarkResult,
         problem_data: Dict[str, Any],
-        generated_code: str,
-        stdout: Optional[str],
-        stderr: Optional[str]
+        generated_codes: List[str],
     ) -> None:
-        """Run evaluation pipeline on generated code.
+        """Run evaluation pipeline on generated codes.
 
         Args:
             benchmark_result: BenchmarkResult to update with evaluation metrics
             problem_data: Original problem specification
-            generated_code: The generated C code
-            stdout: Program output
-            stderr: Error output
+            generated_codes: The generated codes
         """
         try:
             # Prepare execution result for evaluators
             execution_result = {
-                'compiles': not benchmark_result.is_error,
-                'compile_errors': benchmark_result.error_message if benchmark_result.is_error else '',
-                'runs': benchmark_result.success,
-                'runtime_errors': stderr or '',
-                'exit_code': 0 if benchmark_result.success else 1,
-                'stdout': stdout or '',
-                'stderr': stderr or '',
+                'compiles': not benchmark_result.compiles,
+                'runs': benchmark_result.runs,
+                'stdout': benchmark_result.stdout or '',
+                'stderr': benchmark_result.stderr or '',
                 'execution_time_sec': benchmark_result.time_used_sec,
                 'memory_mb': None,  # TODO: Add memory tracking if available
             }
-
             # Run evaluation pipeline
             eval_results = await self.evaluation_pipeline.evaluate(
-                code=generated_code,
+                code=generated_codes,
                 problem=problem_data,
                 execution_result=execution_result
             )
-
             # Aggregate results
             aggregated = self.metrics_aggregator.aggregate(eval_results)
-
             # Update benchmark result
             benchmark_result.composite_score = aggregated.composite_score
             benchmark_result.tier = aggregated.overall_tier
@@ -319,7 +356,6 @@ class Agent():
                 'code_quality': aggregated.category_scores.code_quality,
                 'algorithm': aggregated.category_scores.algorithm,
                 'petsc': aggregated.category_scores.petsc,
-                'semantic': aggregated.category_scores.semantic,
             }
             benchmark_result.evaluation_summary = {
                 'total_evaluators': aggregated.total_evaluators,
@@ -329,7 +365,6 @@ class Agent():
                 'gates_passed': aggregated.gates_passed,
                 'gates_total': aggregated.gates_total,
             }
-
             # Store detailed evaluation results
             benchmark_result.evaluation_details = [
                 {
@@ -344,9 +379,7 @@ class Agent():
                 }
                 for r in eval_results
             ]
-
             print(f"✅ Evaluation complete: Score={aggregated.composite_score:.1f}, Tier={aggregated.overall_tier}")
-
         except Exception as e:
             print(f"❌ Evaluation failed: {e}")
             benchmark_result.composite_score = 0.0
@@ -372,7 +405,7 @@ class Agent():
             "=" * 80,
             "",
             f"Total Problems: {summary['total']}",
-            f"Successful Executions: {summary['success_count']}",
+            f"Successful Executions: {summary['runs_count']}",
             f"Failed Executions: {summary['failure_count']}",
             f"Average Execution Time: {summary['avg_time_sec']:.2f}s",
             "",

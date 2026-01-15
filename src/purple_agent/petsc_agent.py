@@ -121,7 +121,7 @@ class PetscAgentExecutor(AgentExecutor):
             )
         except Exception as e:
             print(f"Task failed with agent error: {e}")
-            parts_list = [TextPart(text=f"Code generation failed ❌\n")]
+            parts_list = [TextPart(text=f"Code generation failed ❌\nerror: {e}\n")]
             await event_queue.enqueue_event(
                 new_agent_parts_message(parts_list, context_id=context.context_id)
             )

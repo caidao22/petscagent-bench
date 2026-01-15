@@ -1,0 +1,64 @@
+# Evaluation Configuration
+
+evaluation:
+  # Enable/disable evaluation phases
+  enable_gates: true
+  enable_metrics: true
+  enable_quality: true
+  
+  # LLM settings for quality evaluators
+  llm:
+    model: "gpt-4o-mini"  # or "gpt-4o" for better quality
+    temperature: 0.3
+    max_concurrent_calls: 3  # Rate limiting
+  
+  # Performance settings
+  parallel_evaluation: true
+  
+  # Thresholds
+  thresholds:
+    min_llm_confidence: 0.7
+    error_tolerance: 1.0e-6
+    error_threshold: 1.0e-6
+    max_slowdown_factor: 2.0
+
+# Scoring configuration
+scoring:
+  # Category weights (must sum to 1.0)
+  weights:
+    correctness: 0.35   # Numerical accuracy, semantic correctness
+    performance: 0.15   # Execution time
+    code_quality: 0.15  # Readability, style, documentation, modularity
+    algorithm: 0.15     # Algorithm choice, solver, discretization
+    petsc: 0.10         # PETSc best practices, error handling, etc.
+    semantic: 0.10      # BCs, ICs, physics preservation
+  
+  # Tier thresholds (0-100 scale)
+  tiers:
+    gold: 85
+    silver: 70
+    bronze: 50
+
+# Evaluator-specific configurations
+evaluators:
+  # Code quality evaluators
+  readability:
+    use_llm: true  # Set to false to use static analysis instead
+  
+  code_style:
+    use_llm: true
+  
+  documentation:
+    use_llm: true
+  
+  modularity:
+    use_llm: true
+  
+  # Metric configurations
+  numerical_accuracy:
+    error_tolerance: 1.0e-6
+    error_threshold: 1.0e-6
+  
+  execution_time:
+    target_time_sec: 1.0
+    max_slowdown_factor: 2.0

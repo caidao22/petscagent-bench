@@ -36,31 +36,32 @@ dotenv.load_dotenv()
 # This ensures the LLM produces output in a structured, parseable format
 SYSTEM_CODE_CONTRACT = (
     "You are a code-generation agent.\n"
-    "You MUST output valid C/C++ source files.\n\n"
+    "You MUST output valid C/C++/CUDA/Kokkos code.\n\n"
+    "When there are multiple source files, you MUST generate a makefile (with name 'makefile') that can build the code.\n\n"
     "Output contract (must follow exactly):\n"
-    "- Output JSON with 'codes' and 'cli_args'\n"
-    "- 'codes' MUST be a list of objects, each with:\n"
-    "    - 'filename': the name of the source file (e.g., 'main.c')\n"
+    "- Output JSON with 'codes', 'nsize' and 'cli_args'\n"
+    "- 'codes' MUST be a list of objects for source code, including the makefile if any, each with:\n"
+    "    - 'filename': the name of the file\n"
     "    - 'code': the full contents of that file\n"
-    "    - the first file must be the main file\n"
+    "- 'nsize' is the number of MPI processes to run with\n"
     "- 'cli_args' contains command line arguments (e.g., '-ts_type rosw -ts_monitor')\n"
     "- Any explanation MUST be inside a C block comment /* ... */\n"
     "- Do NOT use Markdown, backticks, LaTeX, or plain text outside comments\n"
-    "- The first non-comment line must be valid C\n"
-    "- The output must compile with a C/C++ compiler\n"
+    "- The first non-comment line must be valid C/C++/CUDA/Kokkos code\n"
+    "- the first file must be the main file\n"
     "- Violating this contract is a hard failure\n"
 )
 
 
 def prepare_purple_agent_card(url):
     """Create an A2A agent card for the Purple Agent.
-    
+
     The agent card is a metadata descriptor that advertises the agent's
     capabilities, skills, and communication modes to potential clients.
-    
+
     Args:
         url: The base URL where this agent is accessible
-    
+
     Returns:
         AgentCard object describing the Purple Agent's capabilities
     """
@@ -86,22 +87,22 @@ def prepare_purple_agent_card(url):
 
 class PetscAgentExecutor(AgentExecutor):
     """Executor class that handles code generation requests.
-    
+
     This class implements the AgentExecutor interface from the A2A framework.
     It manages:
     - LLM interactions for code generation
     - Conversation context tracking
     - Response formatting and validation
     - Error handling and reporting
-    
+
     Attributes:
         model: LLM model identifier (e.g., "openai/gpt-4o", "gemini/gemini-2.5-flash")
         ctx_id_to_messages: Dict mapping context IDs to conversation histories
     """
-    
+
     def __init__(self, model: str):
         """Initialize the executor with a specific LLM model.
-        
+
         Args:
             model: LLM model string compatible with litellm
                    (e.g., "openai/gpt-4o", "gemini/gemini-2.5-flash")
@@ -112,27 +113,27 @@ class PetscAgentExecutor(AgentExecutor):
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         """Execute a code generation request.
-        
+
         This method is called by the A2A framework when a message is received.
         It processes the request through the following steps:
-        
+
         1. Extract user input from the request context
         2. Initialize or retrieve conversation history
         3. Call the LLM to generate PETSc code
         4. Parse and validate the LLM response
         5. Format the response as A2A message parts (text + files)
         6. Enqueue the response event
-        
+
         Args:
             context: Request context containing user input and metadata
             event_queue: Queue for sending response events back to the client
-        
+
         Note:
             The method handles both success and error cases, always returning
             a properly formatted A2A response.
         """
         user_input = context.get_user_input()
-        
+
         # Initialize conversation history for new contexts
         if context.context_id not in self.ctx_id_to_messages:
             self.ctx_id_to_messages[context.context_id] = [
@@ -148,6 +149,12 @@ class PetscAgentExecutor(AgentExecutor):
                 "content": user_input,
             }
         )
+        messages.append(
+            {
+                "role": "user",
+                "content": f"The main file should be named {context.context_id} with an appropriate extension.",
+            }
+        )
 
         try:
             # Generate PETSc code using the LLM
@@ -159,19 +166,16 @@ class PetscAgentExecutor(AgentExecutor):
             )
             # Extract the generated content from LLM response
             content = response.choices[0].message.model_dump()["content"]
-            
+
             # Remove markdown code block wrapper that some LLMs add
             # This ensures we get clean JSON for parsing
             content = content.replace('```json\n','').replace('```','')
-            
+
             # Parse the JSON response
             obj = json.loads(content)
+            nsize = obj["nsize"]
             cli_args = obj["cli_args"]
-            
-            # Build response parts: text message + file attachments
-            parts_list = [TextPart(text=f"Code generation successful ✅\ncli_args: {cli_args}\n")]
-            
-            # Add each generated code file as a FilePart
+            parts_list = [TextPart(text=f"Code generation successful ✅\nnsize: {nsize}\ncli_args: {cli_args}\n")]
             for entry in obj["codes"]:
                 # Create file object with code content
                 fwb = FileWithBytes(
@@ -180,12 +184,6 @@ class PetscAgentExecutor(AgentExecutor):
                     mime_type="text/plain"
                 )
                 parts_list.append(FilePart(file=fwb))
-            
-            # Rename the first code file to use the context ID for tracking
-            if len(parts_list) > 1:
-                first_entry = obj["codes"][0]
-                ext = first_entry["filename"].split('.')[-1]
-                parts_list[1].file.name = f"{context.context_id}.{ext}"
             # messages.append(
             #     {
             #         "role": "assistant",
@@ -207,7 +205,7 @@ class PetscAgentExecutor(AgentExecutor):
         except Exception as e:
             # Handle any errors during code generation
             print(f"Task failed with agent error: {e}")
-            
+
             # Return error message to the client
             parts_list = [TextPart(text=f"Code generation failed ❌\nerror: {e}\n")]
             await event_queue.enqueue_event(
@@ -216,14 +214,14 @@ class PetscAgentExecutor(AgentExecutor):
 
     async def cancel(self, context, event_queue) -> None:
         """Cancel a running task (not implemented).
-        
+
         This method is required by the AgentExecutor interface but is not
         currently implemented as code generation tasks are atomic and fast.
-        
+
         Args:
             context: Request context
             event_queue: Event queue for sending cancellation acknowledgment
-        
+
         Raises:
             NotImplementedError: Always, as cancellation is not supported
         """

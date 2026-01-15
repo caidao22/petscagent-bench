@@ -1,0 +1,23 @@
+{
+  "problem_name": "scatter_veckok",
+  "problem_id": "6",
+  "problem_description": "Write a PETSc test, which creates a PETSc VECMPIKOKKOS vector x, and initializes it with values 1.0, 2.0, ..., N, where N = 10 is an input argument (-N 10) for the size of the vector. Then the test gets a Kokkos View of the vector data and launch a Kokkos kernel that doubles each element of the vector. After that, the test uses the PETSc's VecScatter functionality to gather the vector at MPI process 0 to a VECSEQKOKKOS vector y, and print out the values there. It should only generate a .kokkos.cpp file and leverage PETSc's makefile support for Kokkos to build the code. Run the test with 3 MPI processes.",
+  "test_cases": [
+    {
+      "nsize": "3",
+      "args": "-N 10",
+      "expected_output": [
+        2.0,
+        4.0,
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0,
+        18.0,
+        20.0
+      ]
+    }
+  ]
+}

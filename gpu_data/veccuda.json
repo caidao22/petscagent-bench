@@ -1,0 +1,23 @@
+{
+  "problem_name": "scatter_veccuda",
+  "problem_id": "5",
+  "problem_description": "Write a PETSc test, which creates a PETSc VECMPICUDA vector x, and initializes it with values 1.0, 2.0, ..., N, where N = 10 is an input argument (-N 10) for the global size of the vector. Then the test fetches the raw device pointer to the value array of the PETSc vector and feeds it to a CUDA kernel, which doubles each element of the vector. After that, the test uses the PETSc's VecScatter functionality to gather the vector at MPI process 0 to a VECSEQCUDA vector y, and print out the values there. It must generate a *.c file and a *.cu file, where the *.c contains the PETSc code and *.cu contains the CUDA kernel. The CUDA file exposes a function `double_elements` that takes a device pointer and the size of the array as arguments. The two files will be linked together to create the final executable. Run the test with 3 MPI processes.",
+  "test_cases": [
+    {
+      "nsize": "3",
+      "args": "-N 10",
+      "expected_output": [
+        2.0,
+        4.0,
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0,
+        18.0,
+        20.0
+      ]
+    }
+  ]
+}

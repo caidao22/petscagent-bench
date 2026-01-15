@@ -341,7 +341,7 @@ class Agent():
             }
             # Run evaluation pipeline
             eval_results = await self.evaluation_pipeline.evaluate(
-                code=generated_codes,
+                code=generated_codes[0], # Focus on the main file for now
                 problem=problem_data,
                 execution_result=execution_result
             )

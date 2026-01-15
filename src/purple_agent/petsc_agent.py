@@ -12,7 +12,8 @@ from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import AgentSkill, AgentCard, AgentCapabilities
-from a2a.utils import new_agent_text_message
+from a2a.utils import new_agent_parts_message
+from a2a.types import TextPart, FilePart, FileWithBytes
 from litellm import completion
 from loguru import logger
 
@@ -20,13 +21,18 @@ dotenv.load_dotenv()
 
 SYSTEM_CODE_CONTRACT = (
     "You are a code-generation agent.\n"
-    "You MUST output a single valid C source file.\n\n"
+    "You MUST output valid C/C++ source files.\n\n"
     "Output contract (must follow exactly):\n"
-    "- Output JSON with 'code' (the full valid C code) and 'cli_args' (command line arguments, e.g. '-ts_type rosw -ts_monitor')\n"
+    "- Output JSON with 'codes' and 'cli_args'\n"
+    "- 'codes' MUST be a list of objects, each with:\n"
+    "    - 'filename': the name of the source file (e.g., 'main.c')\n"
+    "    - 'code': the full contents of that file\n"
+    "    - the first file must be the main file\n"
+    "- 'cli_args' contains command line arguments (e.g., '-ts_type rosw -ts_monitor')\n"
     "- Any explanation MUST be inside a C block comment /* ... */\n"
     "- Do NOT use Markdown, backticks, LaTeX, or plain text outside comments\n"
     "- The first non-comment line must be valid C\n"
-    "- The output must compile with a C compiler\n"
+    "- The output must compile with a C/C++ compiler\n"
     "- Violating this contract is a hard failure\n"
 )
 
@@ -86,8 +92,15 @@ class PetscAgentExecutor(AgentExecutor):
             # remove ```json ``` wrapper that OpenAI includes in its response
             content = content.replace('```json\n','').replace('```','')
             obj = json.loads(content)
-            generated_code = obj["code"]
             cli_args = obj["cli_args"]
+            parts_list = [TextPart(text=f"Code generation successful ✅\ncli_args: {cli_args}\n")]
+            for entry in obj["codes"]:
+                fwb = FileWithBytes(name=entry["filename"],bytes=entry["code"].encode("utf-8"), mime_type="text/plain")
+                parts_list.append(FilePart(file=fwb))
+            if len(parts_list) > 1:
+                first_entry = obj["codes"][0]
+                ext = first_entry["filename"].split('.')[-1]
+                parts_list[1].file.name = f"{context.context_id}.{ext}"
             # messages.append(
             #     {
             #         "role": "assistant",
@@ -103,20 +116,14 @@ class PetscAgentExecutor(AgentExecutor):
             # with open(source_filename, "w") as f:
             #     f.write(generated_code)
             # Return the output
-            file_name = f"{context.context_id}.c"
             await event_queue.enqueue_event(
-                new_agent_text_message(
-                    f"Code generation successful ✅\nfile_name: {file_name}\ncli_args: {cli_args}\n```c\n{generated_code}\n```",
-                    context_id=context.context_id,
-                )
+                new_agent_parts_message(parts_list, context_id=context.context_id)
             )
         except Exception as e:
             print(f"Task failed with agent error: {e}")
+            parts_list = [TextPart(text=f"Code generation failed ❌\n")]
             await event_queue.enqueue_event(
-                new_agent_text_message(
-                    f"Code generation failed ❌",
-                    context_id=context.context_id,
-                )
+                new_agent_parts_message(parts_list, context_id=context.context_id)
             )
 
     async def cancel(self, context, event_queue) -> None:

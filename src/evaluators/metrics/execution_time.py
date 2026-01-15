@@ -1,5 +1,3 @@
-"""Execution time metric - measures performance."""
-
 import time
 from typing import Any, Dict, Optional
 
@@ -7,10 +5,10 @@ from ..base import Evaluator, EvaluatorType, EvaluationResult
 
 
 class ExecutionTimeMetric(Evaluator):
-    """Measures execution time and compares to baseline.
+    """Measures execution time performance.
     
-    This metric evaluates performance by comparing actual execution time
-    to a baseline (if available).
+    This metric evaluates performance based on absolute execution time.
+    Faster execution yields higher scores.
     """
     
     @property
@@ -35,11 +33,11 @@ class ExecutionTimeMetric(Evaluator):
         
         Args:
             code: The generated code (not used directly)
-            problem: May contain 'baseline_time_sec' for comparison
+            problem: Problem specification
             execution_result: Must contain 'execution_time_sec'
         
         Returns:
-            EvaluationResult with raw_value=time, normalized_score based on baseline
+            EvaluationResult with raw_value=time, normalized_score based on performance tiers
         """
         start_time = time.time()
         
@@ -58,56 +56,47 @@ class ExecutionTimeMetric(Evaluator):
             )
         
         actual_time = execution_result['execution_time_sec']
-        baseline_time = problem.get('baseline_time_sec')
+
+        # Performance tiers (configurable)
+        excellent_time = self.config.get('excellent_time_sec', 1.0)
+        good_time = self.config.get('good_time_sec', 5.0)
+        acceptable_time = self.config.get('acceptable_time_sec', 15.0)
+        max_time = self.config.get('max_time_sec', 60.0)
         
-        # If no baseline, use a reasonable default or just report the time
-        if baseline_time is None:
-            # No baseline - just report the time
-            # Score based on absolute time: faster is better
-            # Use a heuristic: 1 second or less = 1.0, exponential decay after that
-            target_time = self.config.get('target_time_sec', 1.0)
-            normalized_score = min(1.0, target_time / max(actual_time, 0.001))
-            
-            feedback = f"Execution time: {actual_time:.3f}s (no baseline available)"
-            passed = actual_time <= target_time * 2  # Within 2x of target
-            
-            return EvaluationResult(
-                evaluator_name=self.name,
-                evaluator_type=self.evaluator_type,
-                passed=passed,
-                raw_value=actual_time,
-                normalized_score=normalized_score,
-                confidence=0.7,  # Lower confidence without baseline
-                feedback=feedback,
-                metadata={
-                    'actual_time_sec': actual_time,
-                    'baseline_available': False,
-                    'target_time_sec': target_time,
-                },
-                evaluation_method=self.evaluation_method,
-                execution_time_ms=(time.time() - start_time) * 1000
-            )
-        
-        # With baseline - compute speedup
-        speedup = baseline_time / max(actual_time, 0.001)  # Avoid division by zero
-        
-        # Normalized score:
-        # - speedup >= 1.0 (faster or equal): score = 1.0
-        # - speedup < 1.0 (slower): score decreases
-        # - Cap at 1.0 if faster
-        normalized_score = min(1.0, speedup)
-        
-        # Determine if passed
-        max_slowdown = self.config.get('max_slowdown_factor', 2.0)
-        passed = actual_time <= baseline_time * max_slowdown
-        
-        # Generate feedback
-        if speedup >= 1.0:
-            feedback = f"Good performance: {actual_time:.3f}s (baseline: {baseline_time:.3f}s, speedup: {speedup:.2f}x)"
-        elif speedup >= 0.5:
-            feedback = f"Acceptable performance: {actual_time:.3f}s (baseline: {baseline_time:.3f}s, slowdown: {1/speedup:.2f}x)"
+        # Calculate normalized score (0.0 to 1.0)
+        # Use piecewise linear scoring with performance tiers
+        if actual_time <= excellent_time:
+            normalized_score = 1.0
+            performance_tier = "excellent"
+        elif actual_time <= good_time:
+            # Linear interpolation between excellent and good
+            normalized_score = 0.8 + 0.2 * (good_time - actual_time) / (good_time - excellent_time)
+            performance_tier = "good"
+        elif actual_time <= acceptable_time:
+            # Linear interpolation between good and acceptable
+            normalized_score = 0.6 + 0.2 * (acceptable_time - actual_time) / (acceptable_time - good_time)
+            performance_tier = "acceptable"
+        elif actual_time <= max_time:
+            # Linear interpolation between acceptable and max
+            normalized_score = 0.2 + 0.4 * (max_time - actual_time) / (max_time - acceptable_time)
+            performance_tier = "poor"
         else:
-            feedback = f"Poor performance: {actual_time:.3f}s (baseline: {baseline_time:.3f}s, slowdown: {1/speedup:.2f}x)"
+            # Beyond max time - very low score
+            normalized_score = max(0.0, 0.2 * max_time / actual_time)
+            performance_tier = "very poor"
+
+        # Determine pass/fail
+        passed = actual_time <= max_time
+
+        # Generate feedback
+        feedback_map = {
+            "excellent": f"Excellent performance: {actual_time:.3f}s (< {excellent_time:.1f}s)",
+            "good": f"Good performance: {actual_time:.3f}s ({excellent_time:.1f}s - {good_time:.1f}s)",
+            "acceptable": f"Acceptable performance: {actual_time:.3f}s ({good_time:.1f}s - {acceptable_time:.1f}s)",
+            "poor": f"Poor performance: {actual_time:.3f}s ({acceptable_time:.1f}s - {max_time:.1f}s)",
+            "very poor": f"Very poor performance: {actual_time:.3f}s (> {max_time:.1f}s)",
+        }
+        feedback = feedback_map[performance_tier]
         
         return EvaluationResult(
             evaluator_name=self.name,
@@ -119,12 +108,12 @@ class ExecutionTimeMetric(Evaluator):
             feedback=feedback,
             metadata={
                 'actual_time_sec': actual_time,
-                'baseline_time_sec': baseline_time,
-                'speedup': speedup,
-                'slowdown': 1 / speedup if speedup > 0 else float('inf'),
-                'baseline_available': True,
+                'performance_tier': performance_tier,
+                'excellent_time_sec': excellent_time,
+                'good_time_sec': good_time,
+                'acceptable_time_sec': acceptable_time,
+                'max_time_sec': max_time,
                 'memory_mb': execution_result.get('memory_mb'),
-                'solver_iterations': execution_result.get('solver_iterations'),
             },
             evaluation_method=self.evaluation_method,
             execution_time_ms=(time.time() - start_time) * 1000

@@ -35,7 +35,7 @@ class ExecutionGate(Evaluator):
         Args:
             code: The generated code (not used directly)
             problem: Problem specification (not used for execution check)
-            execution_result: Must contain 'runs', 'exit_code', 'runtime_errors' keys
+            execution_result: Must contain 'runs' and 'stderr' keys
         
         Returns:
             EvaluationResult with passed=True if executed successfully
@@ -53,8 +53,6 @@ class ExecutionGate(Evaluator):
             )
         
         runs = execution_result.get('runs', False)
-        exit_code = execution_result.get('exit_code', -1)
-        runtime_errors = execution_result.get('runtime_errors', '')
         stderr = execution_result.get('stderr', '')
         
         # Check for common runtime issues
@@ -62,7 +60,7 @@ class ExecutionGate(Evaluator):
         has_assertion = 'assertion' in stderr.lower()
         has_abort = 'abort' in stderr.lower()
         
-        if runs and exit_code == 0:
+        if runs:
             feedback = "Code executed successfully"
         else:
             error_indicators = []
@@ -72,24 +70,21 @@ class ExecutionGate(Evaluator):
                 error_indicators.append("assertion failure")
             if has_abort:
                 error_indicators.append("aborted")
-            if exit_code != 0:
-                error_indicators.append(f"exit code {exit_code}")
             
             if error_indicators:
                 feedback = f"Execution failed: {', '.join(error_indicators)}"
             else:
-                error_preview = runtime_errors[:200] + "..." if len(runtime_errors) > 200 else runtime_errors
+                error_preview = stderr[:200] + "..." if len(stderr) > 200 else stderr
                 feedback = f"Execution failed: {error_preview or 'Unknown error'}"
         
         return EvaluationResult(
             evaluator_name=self.name,
             evaluator_type=self.evaluator_type,
-            passed=runs and exit_code == 0,
+            passed=runs,
             confidence=1.0,  # Deterministic check
             feedback=feedback,
             metadata={
-                'exit_code': exit_code,
-                'runtime_errors': runtime_errors,
+                'stderr': stderr,
                 'has_segfault': has_segfault,
                 'has_assertion': has_assertion,
                 'has_abort': has_abort,

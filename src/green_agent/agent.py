@@ -214,7 +214,7 @@ class Agent():
                 ), "Expecting exactly one text part from the purple agent"
                 # Parse response to find code
                 _PATTERN = re.compile(
-                    r"^Code generation runsful[^\n]*\n"
+                    r"^Code generation successful[^\n]*\n"
                     r"cli_args:\s*(?P<cli_args>[^\n]+)\n",
                     re.DOTALL,
                 )
@@ -255,7 +255,6 @@ class Agent():
                     else:
                         br.stdout = result
                         br.runs = False
-                print(result)
             except Exception as e:
                 br.stdout = f"{type(e).__name__}: {e}"
                 br.runs = False
@@ -264,7 +263,7 @@ class Agent():
                 br.time_used_sec = time.time() - timestamp_started
 
                 # Run evaluation system
-                if not generated_codes:
+                if generated_codes:
                     print(f"@@@ Green agent: Evaluating generated code...")
                     await self._evaluate_code(br, data, generated_codes)
                 results.append(br)

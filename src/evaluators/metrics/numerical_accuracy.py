@@ -37,7 +37,7 @@ class NumericalAccuracyMetric(Evaluator):
         
         Args:
             code: The generated code (not used directly)
-            problem: Must contain 'reference_solution' or 'expected_output'
+            problem: Must contain 'test_cases' with 'expected_output'
             execution_result: Must contain 'stdout' with solution data
         
         Returns:
@@ -45,8 +45,8 @@ class NumericalAccuracyMetric(Evaluator):
         """
         start_time = time.time()
         
-        # Check if reference solution is available
-        if 'reference_solution' not in problem and 'expected_output' not in problem:
+        # Check if test cases with expected output are available
+        if 'test_cases' not in problem or not problem['test_cases']:
             return EvaluationResult(
                 evaluator_name=self.name,
                 evaluator_type=self.evaluator_type,
@@ -54,7 +54,23 @@ class NumericalAccuracyMetric(Evaluator):
                 raw_value=None,
                 normalized_score=None,
                 confidence=None,
-                feedback="No reference solution available for comparison",
+                feedback="No test cases available for comparison",
+                metadata={'reference_available': False},
+                evaluation_method=self.evaluation_method,
+                execution_time_ms=(time.time() - start_time) * 1000
+            )
+        
+        # Get the expected output from the first test case
+        test_case = problem['test_cases'][0]
+        if 'expected_output' not in test_case:
+            return EvaluationResult(
+                evaluator_name=self.name,
+                evaluator_type=self.evaluator_type,
+                passed=None,
+                raw_value=None,
+                normalized_score=None,
+                confidence=None,
+                feedback="No expected output in test case",
                 metadata={'reference_available': False},
                 evaluation_method=self.evaluation_method,
                 execution_time_ms=(time.time() - start_time) * 1000
@@ -76,10 +92,10 @@ class NumericalAccuracyMetric(Evaluator):
         
         # Extract solution from output
         stdout = execution_result['stdout']
-        reference = problem.get('reference_solution') or problem.get('expected_output')
+        expected_output = test_case['expected_output']
         
         try:
-            error_norm = self._compute_error_norm(stdout, reference)
+            error_norm = self._compute_error_norm(stdout, expected_output)
             
             # Normalize score: use exponential decay
             # score = exp(-k * error) where k is chosen so that error=1e-6 gives score ~0.9
@@ -135,38 +151,52 @@ class NumericalAccuracyMetric(Evaluator):
                 execution_time_ms=(time.time() - start_time) * 1000
             )
     
-    def _compute_error_norm(self, stdout: str, reference: Any) -> float:
-        """Compute error norm between output and reference.
+    def _compute_error_norm(self, stdout: str, expected_output: Any) -> float:
+        """Compute error norm between output and expected result.
         
         Args:
-            stdout: Program output containing solution
-            reference: Reference solution (can be various formats)
+            stdout: Program output containing solution (last N lines should contain N numbers)
+            expected_output: Expected output (array of N numbers)
         
         Returns:
             Error norm (float)
         """
-        # Try to extract numerical values from stdout
-        solution_values = self._extract_numbers(stdout)
-        
-        if isinstance(reference, (list, tuple, np.ndarray)):
-            reference_values = np.array(reference)
-        elif isinstance(reference, (int, float)):
-            reference_values = np.array([reference])
-        elif isinstance(reference, str):
-            reference_values = self._extract_numbers(reference)
+        # Convert expected_output to numpy array
+        if isinstance(expected_output, (list, tuple)):
+            reference_values = np.array(expected_output, dtype=float)
+        elif isinstance(expected_output, np.ndarray):
+            reference_values = expected_output.astype(float)
+        elif isinstance(expected_output, (int, float)):
+            reference_values = np.array([float(expected_output)])
         else:
-            raise ValueError(f"Unsupported reference type: {type(reference)}")
+            raise ValueError(f"Unsupported expected_output type: {type(expected_output)}")
+        
+        # Extract the last N lines from stdout, where N is the length of expected_output
+        lines = stdout.strip().split('\n')
+        n_expected = len(reference_values)
+        
+        # Get the last N lines and try to extract numbers from them
+        last_n_lines = lines[-n_expected:] if len(lines) >= n_expected else lines
+        
+        solution_values = []
+        for line in last_n_lines:
+            # Extract numbers from each line
+            numbers = self._extract_numbers(line)
+            if len(numbers) > 0:
+                # Take the first number from each line (or could take last, depending on format)
+                solution_values.append(numbers[0])
+        
+        solution_values = np.array(solution_values, dtype=float)
         
         if len(solution_values) == 0:
             raise ValueError("No numerical values found in output")
         
-        if len(reference_values) == 0:
-            raise ValueError("No numerical values found in reference")
-        
-        # Ensure same length (take minimum)
-        min_len = min(len(solution_values), len(reference_values))
-        solution_values = solution_values[:min_len]
-        reference_values = reference_values[:min_len]
+        # Ensure we have the right number of values
+        if len(solution_values) != len(reference_values):
+            raise ValueError(
+                f"Number of output values ({len(solution_values)}) does not match "
+                f"expected output length ({len(reference_values)})"
+            )
         
         # Compute relative error norm
         error = np.linalg.norm(solution_values - reference_values)

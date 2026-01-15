@@ -15,7 +15,7 @@ def run_green_agent():
     asyncio.run(start_green_agent())
 
 def run_purple_agent():
-    asyncio.run(start_purple_agent())
+    asyncio.run(start_purple_agent(agent_llm="openai/gpt-5.2"))
 
 async def launch_evaluation():
     """Launcher module - initiates and coordinates the evaluation process."""

@@ -87,7 +87,7 @@ Return as JSON.
                 prompt=prompt,
                 response_model=BestPracticesResponse
             )
-            
+            print("best_practices", response.feedback)
             return EvaluationResult(
                 evaluator_name=self.name,
                 evaluator_type=self.evaluator_type,

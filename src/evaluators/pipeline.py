@@ -152,7 +152,6 @@ class EvaluationPipeline:
             for metric in self.metrics:
                 result = await metric.evaluate(code, problem, execution_result)
                 metric_results.append(result)
-        
         all_results.extend(metric_results)
         
         # Phase 3: Quality (rate-limited for LLM-based)
@@ -161,7 +160,6 @@ class EvaluationPipeline:
         # Separate LLM-based from deterministic
         llm_quality = [q for q in self.quality if 'llm' in q.evaluation_method]
         non_llm_quality = [q for q in self.quality if 'llm' not in q.evaluation_method]
-        
         # Non-LLM quality (can run in parallel, fast)
         if non_llm_quality:
             if self.config.parallel_evaluation:

@@ -58,8 +58,6 @@ You can use MCP tools from:
     print(task_text)
     print("Sending...")
     response = await send_message(green_url, task_text)
-    print("Response from green agent:")
-    print(response)
 
     print("Evaluation complete. Terminating agents...")
     p_green.terminate()

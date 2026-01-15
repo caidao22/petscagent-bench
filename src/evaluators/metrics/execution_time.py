@@ -86,7 +86,7 @@ class ExecutionTimeMetric(Evaluator):
             performance_tier = "very poor"
 
         # Determine pass/fail
-        passed = actual_time <= max_time
+        passed = bool(actual_time <= max_time)
 
         # Generate feedback
         feedback_map = {
@@ -97,7 +97,7 @@ class ExecutionTimeMetric(Evaluator):
             "very poor": f"Very poor performance: {actual_time:.3f}s (> {max_time:.1f}s)",
         }
         feedback = feedback_map[performance_tier]
-        
+        print(feedback)
         return EvaluationResult(
             evaluator_name=self.name,
             evaluator_type=self.evaluator_type,

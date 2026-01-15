@@ -69,7 +69,7 @@ class MetricsAggregator:
         )
         gates_passed = sum(1 for r in gates if r.passed)
         gates_total = len(gates)
-        
+
         # If gates failed, return early with score of 0
         if not all_gates_passed:
             return AggregatedMetrics(

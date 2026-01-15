@@ -91,7 +91,7 @@ class Agent():
         )
         self.evaluation_pipeline = EvaluationPipeline(eval_config)
         self.metrics_aggregator = MetricsAggregator()
-        print(f"✅ Evaluation system initialized with {self.evaluation_pipeline.get_evaluator_count()['total']} evaluators")
+        print(f"@@@ Green agent: ✅ Evaluation system initialized with {self.evaluation_pipeline.get_evaluator_count()['total']} evaluators")
 
     def _get_cache_path(self, problem_name: str) -> Path:
         """Get the cache file path for a given problem."""
@@ -106,10 +106,10 @@ class Agent():
             try:
                 with open(cache_path, 'rb') as f:
                     cached_data = pickle.load(f)
-                print(f"✅ Loaded cached response for {problem_name}")
+                print(f"@@@ Green agent: ✅ Loaded cached response for {problem_name}")
                 return cached_data
             except Exception as e:
-                print(f"⚠️ Failed to load cache for {problem_name}: {e}")
+                print(f"@@@ Green agent: ⚠️ Failed to load cache for {problem_name}: {e}")
                 return None
         return None
 
@@ -119,9 +119,9 @@ class Agent():
         try:
             with open(cache_path, 'wb') as f:
                 pickle.dump(response, f)
-            print(f"💾 Cached response for {problem_name}")
+            print(f"@@@ Green agent: 💾 Cached response for {problem_name}")
         except Exception as e:
-            print(f"⚠️ Failed to save cache for {problem_name}: {e}")
+            print(f"@@@ Green agent: ⚠️ Failed to save cache for {problem_name}: {e}")
 
     async def run(self, message: Message, updater: TaskUpdater) -> None:
         """Green agent implementation - manages assessment and evaluation.
@@ -169,8 +169,6 @@ class Agent():
             )
 
             generated_codes = []
-            execution_stdout = None
-            execution_stderr = None
 
             try:
                 # print(
@@ -186,7 +184,6 @@ class Agent():
                 purple_agent_response = None
                 if self.use_cache:
                     purple_agent_response = self._load_cached_response(pname)
-
                 # If no cache, call the purple agent
                 if purple_agent_response is None:
                     print(
@@ -250,11 +247,12 @@ class Agent():
                         executable=pname, args=cli_args
                     )
                     if not response.isError:
-                        br.stderr = result
+                        br.stdout = result
                         br.runs = True
                     else:
-                        br.stdout = result
+                        br.stderr = result
                         br.runs = False
+                    print(result)
             except Exception as e:
                 br.stdout = f"{type(e).__name__}: {e}"
                 br.runs = False
@@ -262,25 +260,25 @@ class Agent():
                 await self.mcp_client.finalize()
                 br.time_used_sec = time.time() - timestamp_started
 
-                # Run evaluation system
-                if generated_codes:
-                    print(f"@@@ Green agent: Evaluating generated code...")
-                    await self._evaluate_code(br, data, generated_codes)
-                results.append(br)
-                # Update rolling summary
-                summary["total"] += 1
-                if br.runs:
-                    summary["runs_count"] += 1
-                else:
-                    summary["failure_count"] += 1
-                # Update evaluation summary
-                if br.tier:
-                    summary["tier_distribution"][br.tier] += 1
-                # Optional: per-case artifact (useful for debugging)
-                await updater.add_artifact(
-                    name=f"benchmark_result_{pname}.json",
-                    parts=[TextPart(text=json.dumps(asdict(br), indent=2))],
-                )
+            # Run evaluation system
+            if generated_codes:
+                print(f"@@@ Green agent: Evaluating generated code...")
+                await self._evaluate_code(br, data, generated_codes)
+            results.append(br)
+            # Update rolling summary
+            summary["total"] += 1
+            if br.runs:
+                summary["runs_count"] += 1
+            else:
+                summary["failure_count"] += 1
+            # Update evaluation summary
+            if br.tier:
+                summary["tier_distribution"][br.tier] += 1
+            # Optional: per-case artifact (useful for debugging)
+            await updater.add_artifact(
+                name=f"benchmark_result_{pname}.json",
+                parts=[TextPart(text=json.dumps(asdict(br), indent=2))],
+            )
         # Final summary artifact
         times = [r.time_used_sec for r in results]
         summary["avg_time_sec"] = (sum(times) / len(times)) if times else None
@@ -331,7 +329,7 @@ class Agent():
         try:
             # Prepare execution result for evaluators
             execution_result = {
-                'compiles': not benchmark_result.compiles,
+                'compiles': benchmark_result.compiles,
                 'runs': benchmark_result.runs,
                 'stdout': benchmark_result.stdout or '',
                 'stderr': benchmark_result.stderr or '',
@@ -378,9 +376,9 @@ class Agent():
                 }
                 for r in eval_results
             ]
-            print(f"✅ Evaluation complete: Score={aggregated.composite_score:.1f}, Tier={aggregated.overall_tier}")
+            print(f"@@@ Green agent: ✅ Evaluation complete: Score={aggregated.composite_score:.1f}, Tier={aggregated.overall_tier}")
         except Exception as e:
-            print(f"❌ Evaluation failed: {e}")
+            print(f"@@@ Green agent: ❌ Evaluation failed: {e}")
             benchmark_result.composite_score = 0.0
             benchmark_result.tier = "FAIL"
             benchmark_result.evaluation_summary = {'error': str(e)}
@@ -438,7 +436,7 @@ class Agent():
             report_lines.append("")
 
         report_text = "\n".join(report_lines)
-
+        print(report_text)
         # Save as artifact
         await updater.add_artifact(
             name="evaluation_report.txt",

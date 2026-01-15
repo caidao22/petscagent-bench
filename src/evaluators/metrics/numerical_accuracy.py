@@ -92,8 +92,8 @@ class NumericalAccuracyMetric(Evaluator):
         
         # Extract solution from output
         stdout = execution_result['stdout']
+        stdout = '\n'.join([line for line in stdout.splitlines() if re.match(r'^-?\d', line)]) # keep numbers only
         expected_output = test_case['expected_output']
-        
         try:
             error_norm = self._compute_error_norm(stdout, expected_output)
             
@@ -106,25 +106,26 @@ class NumericalAccuracyMetric(Evaluator):
             
             # Determine if passed based on threshold
             threshold = self.config.get('error_threshold', 1e-6)
-            passed = error_norm < threshold
-            
+            passed = bool(error_norm < threshold)
+
             if passed:
                 feedback = f"Excellent accuracy: error = {error_norm:.2e} (threshold: {threshold:.2e})"
             elif error_norm < threshold * 100:
                 feedback = f"Acceptable accuracy: error = {error_norm:.2e} (threshold: {threshold:.2e})"
             else:
                 feedback = f"Poor accuracy: error = {error_norm:.2e} (threshold: {threshold:.2e})"
-            
+            print(feedback)
+    
             return EvaluationResult(
                 evaluator_name=self.name,
                 evaluator_type=self.evaluator_type,
                 passed=passed,
-                raw_value=error_norm,
-                normalized_score=normalized_score,
+                raw_value=float(error_norm),
+                normalized_score=float(normalized_score),
                 confidence=1.0,
                 feedback=feedback,
                 metadata={
-                    'error_norm': error_norm,
+                    'error_norm': float(error_norm),
                     'threshold': threshold,
                     'tolerance': tolerance,
                     'reference_available': True,

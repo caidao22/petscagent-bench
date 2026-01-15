@@ -116,7 +116,7 @@ Return as JSON.
                 prompt=prompt,
                 response_model=ReadabilityResponse
             )
-            
+            print("readability", response.feedback)
             return {
                 'score': response.score / 10.0,  # Normalize to 0-1
                 'confidence': response.confidence,

@@ -98,7 +98,7 @@ Return as JSON.
                 prompt=prompt,
                 response_model=SolverChoiceResponse
             )
-            
+            print("solver choice", response.feedback)
             return EvaluationResult(
                 evaluator_name=self.name,
                 evaluator_type=self.evaluator_type,

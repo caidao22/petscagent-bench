@@ -1,3 +1,20 @@
+"""Green Agent - Assessment manager and evaluation coordinator.
+
+The Green Agent is responsible for orchestrating the complete benchmark workflow:
+1. Loading test problems from the dataset
+2. Distributing problems to the Purple Agent (code generator)
+3. Collecting generated code
+4. Compiling and executing code via MCP tools
+5. Running comprehensive evaluation pipeline
+6. Aggregating results and generating reports
+
+Key features:
+- Caching of Purple Agent responses for faster development iteration
+- Comprehensive evaluation using gates, metrics, and quality assessments
+- Detailed per-problem and aggregate reporting
+- Support for both JSON and YAML configuration
+"""
+
 import os
 import json
 import time
@@ -30,11 +47,27 @@ from src.metrics import MetricsAggregator
 
 
 def read_from_json(path):
-    """Reads all the test problems from a given directory"""
+    """Read all test problems from JSONL files in a directory.
+    
+    Each file should contain one JSON object per line, with fields:
+    - problem_name: Unique identifier for the problem
+    - problem_id: Numeric or string ID
+    - problem_description: Natural language problem specification
+    
+    Args:
+        path: Path to directory containing JSONL files
+    
+    Returns:
+        List of problem dictionaries
+    
+    Raises:
+        RuntimeError: If directory does not exist
+    """
     import pathlib
 
     if not os.path.isdir(path):
         raise RuntimeError(f"Directory {path} does not exist")
+    
     data = []
     for file in pathlib.Path(path).iterdir():
         if not os.path.isfile(file):
@@ -111,6 +144,28 @@ def load_evaluation_config(config_path: str = "config/evaluation_config.yaml") -
 
 @dataclass
 class BenchmarkResult:
+    """Container for a single problem's benchmark results.
+    
+    This dataclass stores both execution results and evaluation metrics
+    for a single problem, providing a complete record of the assessment.
+    
+    Execution Results:
+        problem_name: Human-readable problem identifier
+        problem_id: Unique problem ID
+        compiles: Whether the code compiled successfully
+        runs: Whether the code executed without errors
+        time_used_sec: Total time for generation + compilation + execution
+        stdout: Program standard output
+        stderr: Program standard error
+        cli_args: Command-line arguments used for execution
+    
+    Evaluation Results:
+        composite_score: Overall score 0-100 (weighted average of categories)
+        tier: Performance tier (GOLD/SILVER/BRONZE/FAIL)
+        category_scores: Scores by category (correctness, performance, etc.)
+        evaluation_summary: High-level evaluation statistics
+        evaluation_details: Detailed results from each evaluator
+    """
     problem_name: str
     problem_id: str
     runs: bool
@@ -133,7 +188,7 @@ class Agent():
 
     The agent distributes test tasks to participant agents, collects their responses, and reports the results.
     """
-    def __init__(self, purple_agent_url, mcp_server_url, max_num_prob=None, use_cache=True):
+    def __init__(self, purple_agent_url, mcp_server_url, max_num_prob=None, use_cache=False):
         self.purple_agent_url = purple_agent_url
         self.mcp_client = PetscCompileRunMCPClient(mcp_server_url)
         self.max_num_prob = max_num_prob
@@ -152,8 +207,17 @@ class Agent():
         print(f"@@@ Green agent: ✅ Evaluation system initialized with {self.evaluation_pipeline.get_evaluator_count()['total']} evaluators")
 
     def _get_cache_path(self, problem_name: str) -> Path:
-        """Get the cache file path for a given problem."""
-        # Sanitize problem name for filename
+        """Get the cache file path for a given problem.
+        
+        Sanitizes the problem name to create a valid filename.
+        
+        Args:
+            problem_name: Original problem name (may contain special chars)
+        
+        Returns:
+            Path object for the cache file
+        """
+        # Sanitize problem name for filename (replace non-alphanumeric with _)
         safe_name = re.sub(r'[^\w\-_]', '_', problem_name)
         return self.cache_dir / f"{safe_name}.pkl"
 

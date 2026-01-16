@@ -187,14 +187,15 @@ class Agent:
 
     The agent distributes test tasks to participant agents, collects their responses, and reports the results.
     """
-    def __init__(self, purple_agent_url, mcp_server_url, model, max_num_prob=None, use_cache=False):
+    def __init__(self, purple_agent_url, mcp_server_url, model, max_num_prob=None, use_cache=False, green_id=None, purple_id=None):
         self.purple_agent_url = purple_agent_url
         self.mcp_client = PetscCompileRunMCPClient(mcp_server_url)
         self.model = model
         self.max_num_prob = max_num_prob
         self.metrics = {}
         self.use_cache = use_cache
-
+        self.green_id = green_id
+        self.purple_id = purple_id
         # Create cache directory
         self.cache_dir = Path("./purple_agent_cache")
         self.cache_dir.mkdir(exist_ok=True)
@@ -404,6 +405,7 @@ class Agent:
         output_dir.mkdir(exist_ok=True)
         local_path = output_dir / "benchmark_summary.json"
         json_data = {
+            "agent": self.green_id,
             "summary": summary,
             "results": [asdict(r) for r in results],
         }

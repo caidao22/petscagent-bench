@@ -82,7 +82,8 @@ async def launch_evaluation():
     green_url = "http://localhost:9001"    # Green Agent A2A server
     purple_url = "http://localhost:9002"   # Purple Agent A2A server
     mcp_server_url = "http://localhost:8080/mcp"  # MCP tools server
-    
+    green_id = "019bb856-c8bf-7390-8c4f-bced52276932" # AgentBeats ID
+    purple_id = ""
     # Step 1: Start Green Agent (assessment manager)
     print("Launching green agent...")
     p_green = multiprocessing.Process(target=run_green_agent)
@@ -114,6 +115,14 @@ You can use MCP tools from:
 <mcp_server_url>
 {mcp_server_url}/
 </mcp_server_url>
+Green agent's AgentBeats ID is
+<green_id>
+{green_id}
+</green_id>
+Purple agent's AgentBeats ID is
+<purple_id>
+{purple_id}
+</purple_id>
     """
     print("Task description:")
     print(task_text)

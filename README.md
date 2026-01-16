@@ -11,6 +11,60 @@ This project implements a multi-agent system for evaluating code generation agen
 - **Multi-tier Evaluation**: Gates, metrics, and quality assessments
 - **Automated Benchmarking**: End-to-end evaluation workflow
 
+### Why PETSc?
+
+PETSc represents a **uniquely challenging domain** for code generation agents, making it an ideal benchmark for evaluating LLM capabilities in scientific computing:
+
+**🔬 Scientific Computing Complexity**
+- **Domain Expertise Required**: Demands deep understanding of numerical methods, PDEs, linear algebra, and computational science
+- **Mathematical Rigor**: Correct equation discretization, stability analysis, and convergence requirements
+- **Performance Critical**: Solutions must be numerically accurate AND computationally efficient
+
+**🏗️ Software Engineering Challenges**
+- **Large API Surface**: 1000+ functions across diverse components (TS, SNES, KSP, TAO, DM, Vec, Mat)
+- **Complex Abstractions**: Multi-level solver hierarchies
+- **Error Handling Discipline**: Mandatory error checking (PetscCall) throughout
+- **Configuration Complexity**: Runtime options database, solver selection, performance tuning
+
+**⚡ Parallel Computing Demands**
+- **MPI Programming**: Distributed data structures, domain decomposition, parallel communication
+- **Scalability Concerns**: Load balancing, ghost values, efficient parallel I/O
+- **Hardware Awareness**: GPU acceleration (CUDA/HIP backends)
+
+**📚 Documentation and Best Practices**
+- **Style Requirements**: Specific PETSc naming conventions and code organization
+- **Modern Standards**: Evolution from PetscCall error handling
+- **Performance Patterns**: Optimal usage of viewers, options, logging, and monitoring
+
+**🎯 Real-World Impact**
+
+PETSc is used in production by thousands of researchers and engineers across:
+- Climate modeling and weather prediction
+- Computational fluid dynamics
+- Material science and chemistry
+- Astrophysics and cosmology
+- Subsurface flow and reservoir simulation
+- Structural mechanics and optimization
+See https://petsc.org/main/miscellaneous/applications_publications/ for more details
+
+**Why This Matters for LLM Evaluation**:
+
+1. **Beyond Toy Problems**: PETSc benchmarks test whether LLMs can handle real scientific software, not just algorithmic puzzles
+
+2. **Correctness is Verifiable**: Unlike creative tasks, scientific computations have ground truth - wrong answers are measurable
+
+3. **Multi-Dimensional Quality**: Success requires simultaneously achieving:
+   - Mathematical correctness
+   - Software engineering best practices
+   - Performance efficiency
+   - Parallel scalability
+
+4. **Transferable Skills**: Mastery of PETSc code generation indicates capability for other complex scientific/engineering domains (deal.II, Trilinos, hypre, SUNDIALS)
+
+5. **High Stakes**: Errors in scientific software can lead to incorrect research conclusions, failed simulations, or wasted supercomputer time
+
+By benchmarking on PETSc, we evaluate whether LLMs can truly assist in **mission-critical scientific computing** - not just generate syntactically correct code, but produce scientifically valid, performant, and maintainable solutions.
+
 ## Architecture
 
 The system consists of three main components:
@@ -71,7 +125,7 @@ The system consists of three main components:
 
 ### Prerequisites
 
-1. **PETSc Installation**: Install PETSc from [https://petsc.org/](https://petsc.org/)
+1. **PETSc Installation**: Install PETSc from [https://petsc.org/](https://petsc.org/) for local testing only
 2. **Python 3.11+**: Required for the evaluation framework
 3. **UV Package Manager**: Install from [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv)
 
@@ -198,6 +252,142 @@ Qualitative assessments of code quality:
 - Error Handling: Proper error checking
 - Parallel Awareness: MPI and parallel considerations
 
+## Benchmark Problems
+
+The benchmark suite is designed to comprehensively test PETSc code generation across **diverse computational domains**, **varying difficulty levels**, and **different PETSc components**. All problems support **MPI parallelization** and the framework is **easily extensible** with custom problems.
+
+### Key Features
+
+✨ **Diversity**: Covers ODEs, PDEs, and optimization across multiple scientific domains  
+🎯 **Difficulty Range**: From medium (advection) to high (stiff systems) complexity  
+🔧 **Extensibility**: Simple JSON format for adding new benchmark problems  
+⚡ **MPI-Ready**: All problems can be executed in parallel with multiple MPI ranks  
+🧩 **Component Coverage**: Tests TS (time-stepping), TAO (optimization), Vec, Mat, and more
+
+### Current Benchmark Suite
+
+### 1. Robertson ODE (Stiff System)
+
+**Problem Type**: Time-dependent Ordinary Differential Equations  
+**PETSc Components**: TS (Time Stepper)  
+**Difficulty**: High (stiff system with multiple time scales)
+
+**Description**:  
+A classic benchmark for stiff ODE solvers modeling a chemical reaction system:
+
+```
+dy₁/dt = -0.04y₁ + 10⁴y₂y₃
+dy₂/dt = 0.04y₁ - 10⁴y₂y₃ - 3×10⁷y₂²
+dy₃/dt = 3×10⁷y₂²
+```
+
+**Initial Conditions**: y₁=1, y₂=0, y₃=0 at t=0  
+**Time Range**: [0, 100]  
+**Expected Solution**: y₁≈0.617, y₂≈5.61×10⁻⁶, y₃≈0.383
+
+**Key Challenges**:
+- Extreme stiffness (time scales differ by ~7 orders of magnitude)
+- Requires implicit time stepping (Crank-Nicolson)
+- Careful tolerance selection for accuracy
+- Tests IFunction/IJacobian implementation
+
+**Test Configuration**:
+```bash
+-ts_type cn -ts_time_step 1e-7 -ts_adapt_type basic -ts_exact_final_time matchstep
+```
+
+---
+
+### 2. 1D Advection PDE
+
+**Problem Type**: Time-dependent Partial Differential Equation  
+**PETSc Components**: TS (Time Stepper), Vec, DA (Distributed Array)  
+**Difficulty**: Medium (hyperbolic PDE with periodic boundaries)
+
+**Description**:  
+Linear advection equation modeling wave propagation:
+
+```
+∂u/∂t + c∂u/∂x = 0
+```
+
+**Domain**: x ∈ [0,1] with periodic boundary conditions  
+**Initial Condition**: u(x,0) = sin(2πx)  
+**Time Range**: [0, 1]  
+**Advection Speed**: c (constant)
+
+**Key Challenges**:
+- Spatial discretization (first-order upwind scheme)
+- Periodic boundary condition handling
+- Uniform grid management
+- Stability constraints (CFL condition)
+- Tests RHSFunction for explicit time stepping
+
+**Test Configuration**:
+```bash
+-ts_type rk -ts_rk_type 4
+```
+
+---
+
+### 3. Rosenbrock Optimization (Banana Function)
+
+**Problem Type**: Unconstrained Nonlinear Optimization  
+**PETSc Components**: TAO (Toolkit for Advanced Optimization)  
+**Difficulty**: Medium (narrow curved valley, ill-conditioned)
+
+**Description**:  
+Classic optimization benchmark with a narrow, banana-shaped valley:
+
+```
+f(x,y) = (1-x)² + 100(y-x²)²
+```
+
+**Global Minimum**: (x,y) = (1,1) with f(1,1) = 0
+
+**Key Challenges**:
+- Highly ill-conditioned (valley is 100× narrower than wide)
+- Tests gradient computation accuracy
+- Requires quasi-Newton methods (LMVM)
+- Convergence monitoring
+- Modern PetscCall() error handling style
+
+**Test Configuration**:
+```bash
+-tao_view -tao_monitor
+```
+
+---
+
+### Problem Dataset Format
+
+Benchmark problems are stored in JSON format in the `data/` directory:
+
+```json
+{
+  "problem_name": "Problem_Name",
+  "problem_id": "unique_id",
+  "problem_description": "Detailed problem specification...",
+  "test_cases": [
+    {
+      "args": "-solver_options",
+      "expected_output": [numerical_values]
+    }
+  ]
+}
+```
+
+### Evaluation Criteria
+
+Each problem is evaluated across multiple dimensions:
+
+1. **Correctness** (35%): Numerical accuracy, equation implementation, boundary conditions
+2. **Algorithm Choice** (15%): Solver selection, discretization method appropriateness
+3. **Code Quality** (15%): Readability, conventions, documentation
+4. **Performance** (15%): Execution time, convergence rate
+5. **PETSc Best Practices** (10%): Runtime configurability, error handling
+6. **Semantic Correctness** (10%): Physics preservation, stability
+
 ## Output
 
 Evaluation results are saved to the `output/` directory:
@@ -274,22 +464,3 @@ Cached responses are stored in `purple_agent_cache/`.
 2. **LLM API errors**: Verify API keys are valid and have sufficient quota
 3. **Agent timeout**: Increase timeout in `src/util/a2a_comm.py` if needed
 4. **Port conflicts**: Modify ports in `src/launcher.py` if defaults are in use
-
-### Logs
-
-Check log files for detailed error information:
-- `petsc_compile_run_mcp_server.log`: MCP server logs
-- Console output from Green/Purple agents
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Follow existing code style and documentation patterns
-2. Add docstrings to all functions and classes
-3. Include type hints where applicable
-4. Test changes with the full evaluation pipeline
-
-## License
-
-See LICENSE file for details.

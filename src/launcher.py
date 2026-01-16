@@ -28,7 +28,7 @@ from petsc_compile_run_mcp_server import main as start_mcp_server
 
 def run_green_agent():
     """Execute the Green Agent in a separate process.
-    
+
     This wrapper function is needed for multiprocessing.Process,
     which requires a synchronous entry point. The function creates
     a new asyncio event loop and runs the async green agent server.
@@ -38,10 +38,10 @@ def run_green_agent():
 
 def run_purple_agent():
     """Execute the Purple Agent in a separate process.
-    
+
     Starts the Purple Agent with a specific LLM configuration.
     The LLM model can be changed here to test different models.
-    
+
     Currently configured to use: openai/gpt-5.2
     Other options: gemini/gemini-2.5-flash, openai/gpt-4o, etc.
     """
@@ -50,30 +50,30 @@ def run_purple_agent():
 
 async def launch_evaluation():
     """Main launcher function - initiates and coordinates the evaluation process.
-    
+
     This function orchestrates the complete benchmark workflow:
-    
+
     1. Process Initialization:
        - Spawns the Green Agent process (assessment manager)
        - Spawns the Purple Agent process (code generator under test)
        - Spawns the MCP server process (PETSc compilation/execution tools)
-    
+
     2. Health Checks:
        - Waits for each agent to become ready (HTTP health check)
        - Ensures all components are operational before proceeding
-    
+
     3. Task Execution:
        - Sends the evaluation task to the Green Agent
        - Green Agent autonomously manages the evaluation workflow
        - Waits for evaluation to complete
-    
+
     4. Cleanup:
        - Terminates all spawned processes
        - Ensures clean shutdown
-    
+
     The evaluation results are automatically saved by the Green Agent
     to the 'output/' directory.
-    
+
     Raises:
         AssertionError: If any agent fails to become ready within timeout
         Exception: If communication or execution errors occur
@@ -82,7 +82,7 @@ async def launch_evaluation():
     green_url = "http://localhost:9001"    # Green Agent A2A server
     purple_url = "http://localhost:9002"   # Purple Agent A2A server
     mcp_server_url = "http://localhost:8080/mcp"  # MCP tools server
-    
+
     # Step 1: Start Green Agent (assessment manager)
     print("Launching green agent...")
     p_green = multiprocessing.Process(target=run_green_agent)
@@ -118,7 +118,7 @@ You can use MCP tools from:
     print("Task description:")
     print(task_text)
     print("Sending...")
-    
+
     # Send message and wait for completion
     # The Green Agent will autonomously manage the entire evaluation workflow
     response = await send_message(green_url, task_text)
@@ -133,4 +133,3 @@ You can use MCP tools from:
     petsc_mcp_server.terminate()
     petsc_mcp_server.join()
     print("PETSc MCP server terminated.")
-</changes>

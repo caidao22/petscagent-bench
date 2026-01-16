@@ -2,7 +2,7 @@
 
 import time
 from typing import Any, Dict, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from ...base import Evaluator, EvaluatorType, EvaluationResult
 from src.util.llm_client import LLMClient
@@ -14,7 +14,15 @@ class CodeStyleResponse(BaseModel):
     confidence: float  # 0-1
     feedback: str
     follows_conventions: bool
-    issues: list[str]
+    issues: list[str] = []
+    
+    @field_validator('issues', mode='before')
+    @classmethod
+    def validate_issues(cls, v):
+        """Convert string to list if needed."""
+        if isinstance(v, str):
+            return [v] if v else []
+        return v if v is not None else []
 
 
 class CodeStyleQuality(Evaluator):

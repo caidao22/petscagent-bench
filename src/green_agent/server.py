@@ -14,7 +14,7 @@ def load_agent_card_toml(agent_name):
     with open(f"{current_dir}/{agent_name}.toml", "rb") as f:
         return tomllib.load(f)
 
-def start_green_agent(host: str="localhost", port: int=9001, card_url: str=None):
+def start_green_agent(host: str="localhost", port: int=9001, card_url: str=None, agent_llm: str="gemini/gemini-3-flash-preview"):
     """Start the Green Agent A2A HTTP server.
 
     Loads the agent card configuration from ``green_agent.toml``, ensures the
@@ -37,7 +37,7 @@ def start_green_agent(host: str="localhost", port: int=9001, card_url: str=None)
     agent_card_dict = load_agent_card_toml("green_agent")
     agent_card_dict["url"] = card_url or f"http://{host}:{port}" # complete all required card fields
     request_handler = DefaultRequestHandler(
-        agent_executor=GreenAgentExecutor(),
+        agent_executor=GreenAgentExecutor(agent_llm),
         task_store=InMemoryTaskStore(),
     )
     server = A2AStarletteApplication(
@@ -51,7 +51,7 @@ if __name__ == "__main__":
     parser.add_argument("--host", type=str, default="localhost", help="Host to bind the server")
     parser.add_argument("--port", type=int, default=9001, help="Port to bind the server")
     parser.add_argument("--card-url", type=str, help="External URL for the agent card")
-    # parser.add_argument("--agent-llm", type=str, default="openai/gpt-4.1", help="LLM model to use")
+    parser.add_argument("--agent-llm", type=str, default="gemini/gemini-3-flash-preview", help="LLM model to use")
     args = parser.parse_args()
 
-    start_green_agent(args.host, args.port, args.card_url)
+    start_green_agent(args.host, args.port, args.card_url, args.agent_llm)

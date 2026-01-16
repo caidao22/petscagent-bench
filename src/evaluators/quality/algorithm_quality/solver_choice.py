@@ -2,7 +2,7 @@
 
 import time
 from typing import Any, Dict, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from ...base import Evaluator, EvaluatorType, EvaluationResult
 from src.util.llm_client import LLMClient
@@ -15,7 +15,16 @@ class SolverChoiceResponse(BaseModel):
     feedback: str
     solver_identified: str  # e.g., "GMRES", "CG", "Newton"
     appropriate_for_problem: bool
-    suggestions: list[str]
+    suggestions: list[str] = []  # Default to empty list if not provided
+    
+    @field_validator('suggestions', mode='before')
+    @classmethod
+    def validate_suggestions(cls, v):
+        """Convert string to list if needed."""
+        if isinstance(v, str):
+            # If LLM returns a string, wrap it in a list
+            return [v] if v else []
+        return v if v is not None else []
 
 
 class SolverChoiceQuality(Evaluator):

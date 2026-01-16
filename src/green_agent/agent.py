@@ -115,7 +115,6 @@ def load_evaluation_config(config_path: str = "config/evaluation_config.yaml") -
             'enable_metrics': True,
             'enable_quality': True,
             'llm': {
-                'model': 'openai/gpt-4o-mini',
                 'temperature': 0.3,
                 'max_concurrent_calls': 3,
             },
@@ -182,15 +181,16 @@ class BenchmarkResult:
     evaluation_details: Optional[List[Dict[str, Any]]] = None
 
 
-class Agent():
+class Agent:
     """
     This class represents a green agent that manages assessment and evaluation of test tasks.
 
     The agent distributes test tasks to participant agents, collects their responses, and reports the results.
     """
-    def __init__(self, purple_agent_url, mcp_server_url, max_num_prob=None, use_cache=False):
+    def __init__(self, purple_agent_url, mcp_server_url, model, max_num_prob=None, use_cache=False):
         self.purple_agent_url = purple_agent_url
         self.mcp_client = PetscCompileRunMCPClient(mcp_server_url)
+        self.model = model
         self.max_num_prob = max_num_prob
         self.metrics = {}
         self.use_cache = use_cache
@@ -202,7 +202,7 @@ class Agent():
         # Initialize evaluation system with config from file or defaults
         eval_config = load_evaluation_config()
         self.eval_config = eval_config
-        self.evaluation_pipeline = EvaluationPipeline(eval_config)
+        self.evaluation_pipeline = EvaluationPipeline(eval_config, self.model)
         self.metrics_aggregator = MetricsAggregator(eval_config)
         print(f"@@@ Green agent: ✅ Evaluation system initialized with {self.evaluation_pipeline.get_evaluator_count()['total']} evaluators")
 

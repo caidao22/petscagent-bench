@@ -99,18 +99,19 @@ class EvaluationPipeline:
         quality: List of quality evaluators
     """
     
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None, model: str = None):
         """Initialize evaluation pipeline.
         
         Args:
             config: Configuration dictionary loaded from YAML/JSON.
                    If None, uses default configuration.
+            model: Agent LLM model
         """
         self.config = config or {}
         self.gates: List[Evaluator] = []
         self.metrics: List[Evaluator] = []
         self.quality: List[Evaluator] = []
-        
+        self.model = model
         self._setup_evaluators()
     
     def _get_eval_config(self, key: str, default: Any = None) -> Any:
@@ -170,7 +171,7 @@ class EvaluationPipeline:
         # Quality evaluators
         if self._get_eval_config('enable_quality', True):
             llm_config = {
-                'llm_model': self._get_llm_config('model', 'gpt-4o-mini'),
+                'llm_model': self.model,
                 'llm_temperature': self._get_llm_config('temperature', 0.3),
                 'use_llm': True,
             }

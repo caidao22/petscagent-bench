@@ -155,17 +155,17 @@ class EvaluationPipeline:
         # Gates are fundamental checks that code must pass
         if self._get_eval_config('enable_gates', True):
             self.gates = [
-                CompilationGate(),
-                ExecutionGate(),
-                MemorySafetyGate(),
-                APIUsageGate(),
+                CompilationGate(self.config.get('compilation', {})),
+                ExecutionGate(self.config.get('execution', {})),
+                MemorySafetyGate(self.config.get('memory_safety', {})),
+                APIUsageGate(self.config.get('api_usage', {})),
             ]
         
         # Metrics (deterministic measurements)
         if self._get_eval_config('enable_metrics', True):
             self.metrics = [
-                NumericalAccuracyMetric(),
-                ExecutionTimeMetric(),
+                NumericalAccuracyMetric(self.config.get('numerical_accuracy', {})),
+                ExecutionTimeMetric(self.config.get('execution_time', {})),
             ]
         
         # Quality evaluators
@@ -173,23 +173,23 @@ class EvaluationPipeline:
             llm_config = {
                 'llm_model': self.model,
                 'llm_temperature': self._get_llm_config('temperature', 0.3),
-                'use_llm': True,
+                'max_concurrent_calls': self._get_llm_config('max_concurrent_calls', 3),
             }
             
             self.quality = [
                 # Code quality (can use LLM or static analysis)
-                ReadabilityQuality(llm_config),
-                CodeStyleQuality(llm_config),
-                DocumentationQuality(llm_config),
+                ReadabilityQuality({**llm_config, **self.config.get('readability', {})}),
+                CodeStyleQuality({**llm_config, **self.config.get('code_style', {})}),
+                DocumentationQuality({**llm_config, **self.config.get('documentation', {})}),
                 
                 # Algorithm quality (LLM-based)
-                AlgorithmAppropriatenessQuality(llm_config),
-                SolverChoiceQuality(llm_config),
+                AlgorithmAppropriatenessQuality({**llm_config, **self.config.get('algorithm_appropriateness', {})}),
+                SolverChoiceQuality({**llm_config, **self.config.get('solver_choice', {})}),
                 
                 # PETSc quality (mixed)
-                PETScBestPracticesQuality(llm_config),
-                ErrorHandlingQuality(),  # Deterministic
-                ParallelAwarenessQuality(),  # Deterministic
+                PETScBestPracticesQuality({**llm_config, **self.config.get('petsc_best', {})}),
+                ErrorHandlingQuality(self.config.get('error_handling', {})),  # Deterministic
+                ParallelAwarenessQuality(self.config.get('parallel_awareness', {})),  # Deterministic
             ]
     
     async def evaluate(

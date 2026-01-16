@@ -101,12 +101,13 @@ class NumericalAccuracyMetric(Evaluator):
             # score = exp(-k * error) where k is chosen so that error=1e-6 gives score ~0.9
             # k = -ln(0.9) / 1e-6 ≈ 105361
             # For simplicity, use: score = exp(-error / tolerance)
-            tolerance = self.config.get('numerical_accuracy', {}).get('error_tolerance', 1e-6)
+            print(self.config)
+            tolerance = self.config.get('error_tolerance', 1e-6) if self.config else 1e-6
             normalized_score = min(1.0, np.exp(-error_norm / tolerance))
             
             # Determine if passed based on threshold
 
-            threshold = self.config.get('numerical_accuracy', {}).get('error_threshold', 1e-6)
+            threshold = self.config.get('error_threshold', 1e-6) if self.config else 1e-6
             passed = bool(error_norm < threshold)
 
             if passed:

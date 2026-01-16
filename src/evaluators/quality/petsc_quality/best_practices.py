@@ -2,7 +2,7 @@
 
 import time
 from typing import Any, Dict, Optional
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
 
 from ...base import Evaluator, EvaluatorType, EvaluationResult
 from src.util.llm_client import LLMClient
@@ -17,14 +17,6 @@ class BestPracticesResponse(BaseModel):
     uses_viewers: bool
     configurable: bool
     practices_followed: list[str] = []
-    
-    @field_validator('practices_followed', mode='before')
-    @classmethod
-    def validate_practices(cls, v):
-        """Convert string to list if needed."""
-        if isinstance(v, str):
-            return [v] if v else []
-        return v if v is not None else []
 
 
 class PETScBestPracticesQuality(Evaluator):

@@ -2,7 +2,7 @@
 
 import time
 from typing import Any, Dict, Optional
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
 
 from ...base import Evaluator, EvaluatorType, EvaluationResult
 from src.util.llm_client import LLMClient
@@ -15,14 +15,6 @@ class AlgorithmResponse(BaseModel):
     feedback: str
     approach_suitable: bool
     better_alternatives: list[str] = []
-    
-    @field_validator('better_alternatives', mode='before')
-    @classmethod
-    def validate_alternatives(cls, v):
-        """Convert string to list if needed."""
-        if isinstance(v, str):
-            return [v] if v else []
-        return v if v is not None else []
 
 
 class AlgorithmAppropriatenessQuality(Evaluator):

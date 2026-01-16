@@ -58,10 +58,10 @@ class ExecutionTimeMetric(Evaluator):
         actual_time = execution_result['execution_time_sec']
 
         # Performance tiers (configurable)
-        excellent_time = self.config.get('execution_time', {}).get('excellent_time_sec', 1.0)
-        good_time = self.config.get('execution_time', {}).get('good_time_sec', 5.0)
-        acceptable_time = self.config.get('execution_time', {}).get('acceptable_time_sec', 15.0)
-        max_time = self.config.get('execution_time', {}).get('max_time_sec', 60.0)
+        excellent_time = self.config.get('excellent_time_sec', 1.0) if self.config else 1.0
+        good_time = self.config.get('good_time_sec', 5.0) if self.config else 5.0
+        acceptable_time = self.config.get('acceptable_time_sec', 15.0) if self.config else 15.0
+        max_time = self.config.get('max_time_sec', 60.0) if self.config else 60.0
         
         # Calculate normalized score (0.0 to 1.0)
         # Use piecewise linear scoring with performance tiers

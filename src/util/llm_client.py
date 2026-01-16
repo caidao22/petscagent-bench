@@ -56,10 +56,23 @@ class LLMClient:
             content = response.choices[0].message.content
             data = json.loads(content)
 
+            # Handle case where LLM returns array instead of object
+            if isinstance(data, list) and data:
+                # Use first element if it's an array of objects
+                data = data[0]
+
             # Validate with pydantic model
             return response_model(**data)
+        except json.JSONDecodeError as e:
+            print(f"ERROR: Failed to parse JSON from LLM response")
+            print(f"Raw content: {content[:500]}")
+            raise
         except Exception as e:
             print(f"ERROR in structured_completion: {type(e).__name__}: {str(e)}")
+            if 'content' in locals():
+                print(f"Raw LLM response: {content[:500]}")
+            if 'data' in locals():
+                print(f"Parsed data type: {type(data)}, value: {str(data)[:200]}")
             raise
 
     async def completion(self, prompt: str, system_prompt: Optional[str] = None) -> str:

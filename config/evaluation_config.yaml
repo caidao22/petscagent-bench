@@ -13,10 +13,6 @@ evaluation:
   
   # Performance settings
   parallel_evaluation: true
-  
-  # LLM Thresholds
-  thresholds:
-    min_llm_confidence: 0.7
 
 # Scoring configuration
 scoring:

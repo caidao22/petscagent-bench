@@ -2,7 +2,7 @@
 
 import time
 from typing import Any, Dict, Optional
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
 
 from ...base import Evaluator, EvaluatorType, EvaluationResult
 from src.util.llm_client import LLMClient
@@ -15,14 +15,6 @@ class ReadabilityResponse(BaseModel):
     feedback: str
     strengths: list[str] = []
     weaknesses: list[str] = []
-    
-    @field_validator('strengths', 'weaknesses', mode='before')
-    @classmethod
-    def validate_lists(cls, v):
-        """Convert string to list if needed."""
-        if isinstance(v, str):
-            return [v] if v else []
-        return v if v is not None else []
 
 
 class ReadabilityQuality(Evaluator):

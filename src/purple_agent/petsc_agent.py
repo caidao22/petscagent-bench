@@ -16,8 +16,6 @@ import argparse
 import uvicorn
 import dotenv
 import os
-# import subprocess
-# import shutil
 import json
 from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
@@ -36,17 +34,17 @@ dotenv.load_dotenv()
 # This ensures the LLM produces output in a structured, parseable format
 SYSTEM_CODE_CONTRACT = (
     "You are a code-generation agent.\n"
-    "You MUST output valid C/C++/CUDA/Kokkos code.\n\n"
+    "You MUST output valid C/C++/CUDA code.\n\n"
     "Output contract (must follow exactly):\n"
     "- Output JSON with 'codes', 'nsize' and 'cli_args'\n"
-    "- 'codes' MUST be a list of objects for source code, including the makefile if any, each with:\n"
+    "- 'codes' MUST be a list of objects for source code, each with:\n"
     "    - 'filename': the name of the file\n"
     "    - 'code': the full contents of that file\n"
     "- 'nsize' is the number of MPI processes to run with, use 1 for sequential codes\n"
     "- 'cli_args' contains command line arguments (e.g., '-ts_type rosw -ts_monitor')\n"
     "- Any explanation MUST be inside a C block comment /* ... */\n"
     "- Do NOT use Markdown, backticks, LaTeX, or plain text outside comments\n"
-    "- The first non-comment line must be valid C/C++/CUDA/Kokkos code\n"
+    "- The first non-comment line must be valid C/C++/CUDA code\n"
     "- the first file must be the main file\n"
     "- Violating this contract is a hard failure\n"
 )
@@ -177,21 +175,6 @@ class PetscAgentExecutor(AgentExecutor):
                     mime_type="text/plain"
                 )
                 parts_list.append(FilePart(file=fwb))
-
-            # messages.append(
-            #     {
-            #         "role": "assistant",
-            #         "content": generated_code,
-            #     }
-            # )
-
-            # create a unique working directory for this context
-            # work_dir = "generated_codes"
-            # os.makedirs(work_dir, exist_ok=True)
-            # 2. Save the generated code to a file inside the work_dir
-            # source_filename = os.path.join(work_dir, f"{context.context_id}.c")
-            # with open(source_filename, "w") as f:
-            #     f.write(generated_code)
             # Send the successful response back to the client
             await event_queue.enqueue_event(
                 new_agent_parts_message(parts_list, context_id=context.context_id)
@@ -199,7 +182,6 @@ class PetscAgentExecutor(AgentExecutor):
         except Exception as e:
             # Handle any errors during code generation
             print(f"Task failed with agent error: {e}")
-
             # Return error message to the client
             parts_list = [TextPart(text=f"Code generation failed ❌\nerror: {e}\n")]
             await event_queue.enqueue_event(

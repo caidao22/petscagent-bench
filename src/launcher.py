@@ -33,7 +33,7 @@ def run_green_agent():
     which requires a synchronous entry point. The function creates
     a new asyncio event loop and runs the async green agent server.
     """
-    asyncio.run(start_green_agent(agent_llm="gemini/gemini-3-flash-preview"))
+    asyncio.run(start_green_agent(agent_llm="openai/gpt-4o"))
 
 
 def run_purple_agent():
@@ -45,7 +45,7 @@ def run_purple_agent():
     Currently configured to use: openai/gpt-5.2
     Other options: gemini/gemini-2.5-flash, openai/gpt-4o, etc.
     """
-    asyncio.run(start_purple_agent(agent_llm="gemini/gemini-3-flash-preview"))
+    asyncio.run(start_purple_agent(agent_llm="openai/gpt-4o"))
 
 
 async def launch_evaluation():

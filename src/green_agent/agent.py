@@ -269,7 +269,6 @@ class Agent:
 
         input_text = get_message_text(message)
         data_file_path = Path("./data")
-        # data_file_path = Path("./gpu_data") # for testing
         test_data = read_from_json(data_file_path)
         limit = self.max_num_prob or len(test_data)
 
@@ -355,56 +354,51 @@ class Agent:
                 try:
                   br.compile_stdout = await self.mcp_client.make(executable=pname)
                   br.compiles       = True
+
+                  try:
+                    br.stdout     = await self.mcp_client.run_executable(executable=pname, args=cli_args)
+                    br.returncode = 0
+                    br.runs       = True
+                  except mcpdynamicclient.MCPDynamicClientReturnCode as e:
+                    br.stdout     = e.stdout
+                    br.stderr     = e.stderr
+                    br.returncode = e.returncode
+                    br.runs       = False
+                  except Exception as e:
+                    raise RuntimeError('MCP-tool breakage. Unable to run executable:' + str(e))
                 except mcpdynamicclient.MCPDynamicClientReturnCode as e:
                   br.compile_stdout = e.stdout
                   br.compile_stderr = e.stderr
                   br.compiles       = False
                   br.runs           = False
                 except Exception as e:
-                  # An MCP-tool break should TURN-OFF evaluation of this case because the problem is beyond the control of the agent being tested
                   raise RuntimeError('MCP-tool breakage. Unable to run compiler:' + str(e))
 
-                if br.compiles:
-                   try:
-                     br.stdout     = await self.mcp_client.run_executable(executable=pname, args=cli_args)
-                     br.returncode = 0
-                     br.runs       = True
-                   except mcpdynamicclient.MCPDynamicClientReturnCode as e:
-                     br.stdout     = e.stdout
-                     br.stderr     = e.stderr
-                     br.returncode = e.returncode
-                     br.runs       = False
-                   except Exception as e:
-                     raise RuntimeError('MCP-tool breakage. Unable to run executable:' + str(e))
+                # Run evaluation system
+                print(f"@@@ Green agent: Evaluating generated code...")
+                await self._evaluate_code(br, data, generated_codes)
+                results.append(br)
+                # Update rolling summary
+                summary["total"] += 1
+                if br.runs:
+                  summary["runs_count"] += 1
+                else:
+                  summary["failure_count"] += 1
+                # Update evaluation summary
+                if br.tier:
+                  summary["tier_distribution"][br.tier] += 1
+                # Optional: per-case artifact (useful for debugging)
+                await updater.add_artifact(
+                  name=f"benchmark_result_{pname}.json",
+                  parts=[TextPart(text=json.dumps(asdict(br), indent=2))],
+                )
 
             except Exception as e:
-                br.stdout = f"{type(e).__name__}: {e}"
-                print(f'Failure in processing problem in green agent ------------------------------\n{e}\n')
-                br.runs = False
-                print(f"@@@ Green agent: ⚠️E Failed to parse/compile/run the generated code : {e}")
+                print(f'Failure in processing problem in green agent --(thus have to skip its evaluation)-----------------\n{type(e).__name__}: {e}\n')
             finally:
                 await self.mcp_client.finalize()
                 br.time_used_sec = time.time() - timestamp_started
 
-            # Run evaluation system
-            if generated_codes:
-                print(f"@@@ Green agent: Evaluating generated code...")
-                await self._evaluate_code(br, data, generated_codes)
-            results.append(br)
-            # Update rolling summary
-            summary["total"] += 1
-            if br.runs:
-                summary["runs_count"] += 1
-            else:
-                summary["failure_count"] += 1
-            # Update evaluation summary
-            if br.tier:
-                summary["tier_distribution"][br.tier] += 1
-            # Optional: per-case artifact (useful for debugging)
-            await updater.add_artifact(
-                name=f"benchmark_result_{pname}.json",
-                parts=[TextPart(text=json.dumps(asdict(br), indent=2))],
-            )
         # Final summary artifact
         times = [r.time_used_sec for r in results]
         summary["avg_time_sec"] = (sum(times) / len(times)) if times else None

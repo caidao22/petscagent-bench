@@ -350,23 +350,33 @@ class Agent:
                       created = await self.mcp_client.create_file_from_string(filename=f.name, file_contents = str(f.bytes))
                       if not created: raise RuntimeError('MCP tool create_file_from_string() return false indicating the file was not created')
                     except Exception as e:
-                      raise RuntimeError('Unable to create file on MCP compile-run server:' + str(e))
+                      raise RuntimeError('MCP-tool breakage. Unable to create file on MCP compile-run server:' + str(e))
 
-                (_, response) = await self.mcp_client.make(executable=pname)
-                if response.isError:
-                    br.compiles = False
-                    br.runs = False
-                else:
-                    br.compiles = True
-                    (result, response) = await self.mcp_client.run_executable(
-                        executable=pname, nsize=int(nsize), args=cli_args
-                    )
-                    if not response.isError:
-                        br.stdout = result
-                        br.runs = True
-                    else:
-                        br.stderr = result
-                        br.runs = False
+                try:
+                  br.compile_stdout = await self.mcp_client.make(executable=pname)
+                  br.compiles       = True
+                except mcpdynamicclient.MCPDynamicClientReturnCode as e:
+                  br.compile_stdout = e.stdout
+                  br.compile_stderr = e.stderr
+                  br.compiles       = False
+                  br.runs           = False
+                except Exception as e:
+                  # An MCP-tool break should TURN-OFF evaluation of this case because the problem is beyond the control of the agent being tested
+                  raise RuntimeError('MCP-tool breakage. Unable to run compiler:' + str(e))
+
+                if br.compiles:
+                   try:
+                     br.stdout     = await self.mcp_client.run_executable(executable=pname, args=cli_args)
+                     br.returncode = 0
+                     br.runs       = True
+                   except mcpdynamicclient.MCPDynamicClientReturnCode as e:
+                     br.stdout     = e.stdout
+                     br.stderr     = e.stderr
+                     br.returncode = e.returncode
+                     br.runs       = False
+                   except Exception as e:
+                     raise RuntimeError('MCP-tool breakage. Unable to run executable:' + str(e))
+
             except Exception as e:
                 br.stdout = f"{type(e).__name__}: {e}"
                 print(f'Failure in processing problem in green agent ------------------------------\n{e}\n')

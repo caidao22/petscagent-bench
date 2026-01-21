@@ -101,7 +101,6 @@ class NumericalAccuracyMetric(Evaluator):
             # score = exp(-k * error) where k is chosen so that error=1e-6 gives score ~0.9
             # k = -ln(0.9) / 1e-6 ≈ 105361
             # For simplicity, use: score = exp(-error / tolerance)
-            print(self.config)
             tolerance = self.config.get('error_tolerance', 1e-6) if self.config else 1e-6
             normalized_score = min(1.0, np.exp(-error_norm / tolerance))
             
@@ -116,7 +115,6 @@ class NumericalAccuracyMetric(Evaluator):
                 feedback = f"Acceptable accuracy: error = {error_norm:.2e} (threshold: {threshold:.2e})"
             else:
                 feedback = f"Poor accuracy: error = {error_norm:.2e} (threshold: {threshold:.2e})"
-            print(feedback)
     
             return EvaluationResult(
                 evaluator_name=self.name,

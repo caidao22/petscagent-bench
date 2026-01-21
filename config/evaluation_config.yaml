@@ -8,7 +8,7 @@ evaluation:
   
   # LLM settings for quality evaluators
   llm:
-    temperature: 0.3
+    temperature: 0           # Set to 0 only for reproducibility
     max_concurrent_calls: 3  # Rate limiting
   
   # Performance settings

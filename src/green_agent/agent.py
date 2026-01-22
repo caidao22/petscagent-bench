@@ -353,6 +353,7 @@ class Agent:
 
                 try:
                   br.compile_stdout = await self.mcp_client.make(executable=pname)
+                  br.compile_stderr = self.mcp_client.reponse.stderr
                   br.compiles       = True
 
                   try:

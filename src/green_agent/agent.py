@@ -36,7 +36,7 @@ from typing import Any, Dict, List, Optional
 import dotenv
 
 dotenv.load_dotenv()
-from utils import mcpdynamicclient
+import mcpdynamicclient
 from petsc_compile_run_mcp_client import PetscCompileRunMCPClient
 
 # Import evaluation system
@@ -245,16 +245,21 @@ class Agent:
         except Exception as e:
             print(f"@@@ Green agent: ⚠️ Failed to save cache for {problem_name}: {e}")
 
-    async def _create_files_on_server(self, pname: str, file_list: List[Any], generated_codes: List[bytes]) -> None:
+    async def _create_files_on_server(self, pname: str, file_list: List[Any], generated_codes: List[bytes]) -> str:
         """Upload generated files to MCP server.
 
         Args:
+            pname: Project name prefix for generated files
             file_list: List of file parts from purple agent response
             generated_codes: List to append generated code bytes to
 
         Raises:
             RuntimeError: If file creation fails
+
+        Returns:
+        String of dependency file names separated by spaces
         """
+        dep_list = []
         for f in file_list:
             generated_codes.append(f.bytes)
             parts = f.name.split('.')
@@ -264,24 +269,27 @@ class Agent:
                 f.name = f"{pname}.c"
             elif ext == "cu":
                 f.name = f"{pname}cu.cu"
+                dep_list.append(f.name)
             if ext == "cpp" and len(parts) > 2 and parts[-2] == "kokkos":
                 f.name = f"{pname}kok.kokkos.cpp"
+                dep_list.append(f.name)
             created = await self.mcp_client.create_file_from_string(
                 filename=f.name, file_contents=str(f.bytes)
                 )
             if not created:
                 raise RuntimeError(
                     'MCP tool create_file_from_string() returned false indicating the file was not created'
-        )
+                )
+        return " ".join(dep_list)
 
-    async def _compile_code(self, br: BenchmarkResult, pname: str) -> None:
+    async def _compile_code(self, br: BenchmarkResult, pname: str, dep_list: str) -> None:
         """Compile the generated code.
         Args:
             br: BenchmarkResult to update with compilation results
             pname: Problem/executable name
         """
         try:
-            br.compile_stdout = await self.mcp_client.make(executable=pname)
+            br.compile_stdout = await self.mcp_client.make(executable=pname, dependencies=dep_list)
             br.compile_stderr = self.mcp_client.response.stderr
             br.compiles = True
         except mcpdynamicclient.MCPDynamicClientReturnCode as e:
@@ -371,12 +379,12 @@ class Agent:
                         context_id=pname,
                     )
                     br.time_used_sec = time.time() - timestamp_started
+                else:
+                    print(f"@@@ Green agent: Using cached response for {pname}")
 
                 # Cache the response
                 if self.use_cache:
                     self._save_cached_response(pname, purple_agent_response)
-                else:
-                    print(f"@@@ Green agent: Using cached response for {pname}")
 
                 res_root = purple_agent_response.root
                 if not isinstance(res_root, SendMessageSuccessResponse):
@@ -411,9 +419,9 @@ class Agent:
                     await self.mcp_client.initialize()
                     mcp_initialized = True
                 # Upload files to server
-                await self._create_files_on_server(pname, file_list, generated_codes)
+                dep_list = await self._create_files_on_server(pname, file_list, generated_codes)
                 # Compile the code
-                await self._compile_code(br, pname)
+                await self._compile_code(br, pname, dep_list)
                 # Run the executable (only if compilation succeeded)
                 if br.compiles:
                     await self._run_executable(br, pname, cli_args)
@@ -639,4 +647,6 @@ class Agent:
             name="evaluation_detailed_report.json",
             parts=[TextPart(text=json.dumps(detailed_report, indent=2))],
         )
+
+
 

@@ -8,6 +8,7 @@ COPY pyproject.toml ./
 COPY README.md ./
 COPY src src
 COPY data data
+COPY config config
 
 RUN \
     --mount=type=cache,target=/home/petscagent/.cache/uv,uid=1000 \

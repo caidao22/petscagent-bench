@@ -24,21 +24,19 @@ from a2a.server.tasks import TaskUpdater
 from a2a.types import (
     Message,
     TaskState,
-    Part,
     TextPart,
     SendMessageSuccessResponse,
-    Message,
 )
 from a2a.utils import get_message_text, new_agent_text_message, get_text_parts, get_file_parts
 from src.util.a2a_comm import send_message
 from pathlib import Path
 
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict
 from typing import Any, Dict, List, Optional
 import dotenv
 
 dotenv.load_dotenv()
-
+from utils import mcpdynamicclient
 from petsc_compile_run_mcp_client import PetscCompileRunMCPClient
 
 # Import evaluation system
@@ -48,28 +46,26 @@ from src.metrics import MetricsAggregator
 
 def read_from_json(path):
     """Read all test problems from JSONL files in a directory.
-    
+
     Each file should contain one JSON object per line, with fields:
     - problem_name: Unique identifier for the problem
     - problem_id: Numeric or string ID
     - problem_description: Natural language problem specification
-    
+
     Args:
         path: Path to directory containing JSONL files
-    
+
     Returns:
         List of problem dictionaries
-    
+
     Raises:
         RuntimeError: If directory does not exist
     """
-    import pathlib
-
     if not os.path.isdir(path):
         raise RuntimeError(f"Directory {path} does not exist")
-    
+
     data = []
-    for file in pathlib.Path(path).iterdir():
+    for file in Path(path).iterdir():
         if not os.path.isfile(file):
             continue
         with open(file, "r", encoding="utf-8") as fd:
@@ -144,10 +140,10 @@ def load_evaluation_config(config_path: str = "config/evaluation_config.yaml") -
 @dataclass
 class BenchmarkResult:
     """Container for a single problem's benchmark results.
-    
+
     This dataclass stores both execution results and evaluation metrics
     for a single problem, providing a complete record of the assessment.
-    
+
     Execution Results:
         problem_name: Human-readable problem identifier
         problem_id: Unique problem ID
@@ -157,7 +153,7 @@ class BenchmarkResult:
         stdout: Program standard output
         stderr: Program standard error
         cli_args: Command-line arguments used for execution
-    
+
     Evaluation Results:
         composite_score: Overall score 0-100 (weighted average of categories)
         tier: Performance tier (GOLD/SILVER/BRONZE/FAIL)
@@ -173,6 +169,9 @@ class BenchmarkResult:
     stdout: Optional[str] = None
     stderr: Optional[str] = None
     cli_args: Optional[str] = None
+    # Compilation fields
+    compile_stdout: Optional[str] = None
+    compile_stderr: Optional[str] = None
     # Evaluation fields
     composite_score: Optional[float] = None  # 0-100
     tier: Optional[str] = None  # GOLD/SILVER/BRONZE/FAIL
@@ -209,12 +208,12 @@ class Agent:
 
     def _get_cache_path(self, problem_name: str) -> Path:
         """Get the cache file path for a given problem.
-        
+
         Sanitizes the problem name to create a valid filename.
-        
+
         Args:
             problem_name: Original problem name (may contain special chars)
-        
+
         Returns:
             Path object for the cache file
         """
@@ -222,7 +221,7 @@ class Agent:
         safe_name = re.sub(r'[^\w\-_]', '_', problem_name)
         return self.cache_dir / f"{safe_name}.pkl"
 
-    def _load_cached_response(self, problem_name: str):
+    def _load_cached_response(self, problem_name: str) -> Optional[Any]:
         """Load cached purple agent response if it exists."""
         cache_path = self._get_cache_path(problem_name)
         if cache_path.exists():
@@ -236,7 +235,7 @@ class Agent:
                 return None
         return None
 
-    def _save_cached_response(self, problem_name: str, response):
+    def _save_cached_response(self, problem_name: str, response: Any) -> None:
         """Save purple agent response to cache."""
         cache_path = self._get_cache_path(problem_name)
         try:
@@ -245,6 +244,69 @@ class Agent:
             print(f"@@@ Green agent: 💾 Cached response for {problem_name}")
         except Exception as e:
             print(f"@@@ Green agent: ⚠️ Failed to save cache for {problem_name}: {e}")
+
+    async def _create_files_on_server(self, pname: str, file_list: List[Any], generated_codes: List[bytes]) -> None:
+        """Upload generated files to MCP server.
+
+        Args:
+            file_list: List of file parts from purple agent response
+            generated_codes: List to append generated code bytes to
+
+        Raises:
+            RuntimeError: If file creation fails
+        """
+        for f in file_list:
+            generated_codes.append(f.bytes)
+            parts = f.name.split('.')
+            ext = parts[-1]
+            # Use a base name to avoid overwriting multiple files of the same type
+            if ext == "c":
+                f.name = f"{pname}.c"
+            elif ext == "cu":
+                f.name = f"{pname}cu.cu"
+            if ext == "cpp" and len(parts) > 2 and parts[-2] == "kokkos":
+                f.name = f"{pname}kok.kokkos.cpp"
+            created = await self.mcp_client.create_file_from_string(
+                filename=f.name, file_contents=str(f.bytes)
+                )
+            if not created:
+                raise RuntimeError(
+                    'MCP tool create_file_from_string() returned false indicating the file was not created'
+        )
+
+    async def _compile_code(self, br: BenchmarkResult, pname: str) -> None:
+        """Compile the generated code.
+        Args:
+            br: BenchmarkResult to update with compilation results
+            pname: Problem/executable name
+        """
+        try:
+            br.compile_stdout = await self.mcp_client.make(executable=pname)
+            br.compile_stderr = self.mcp_client.response.stderr
+            br.compiles = True
+        except mcpdynamicclient.MCPDynamicClientReturnCode as e:
+            br.compile_stdout = e.stdout
+            br.compile_stderr = e.stderr
+            br.compiles = False
+            br.runs = False
+            raise
+
+    async def _run_executable(self, br: BenchmarkResult, pname: str, cli_args: str) -> None:
+        """Run the compiled executable.
+        Args:
+            br: BenchmarkResult to update with execution results
+            pname: Problem/executable name
+            cli_args: Command line arguments for execution
+        """
+        try:
+            br.stdout = await self.mcp_client.run_executable(executable=pname, args=cli_args)
+            br.stderr = ""
+            br.runs = True
+        except mcpdynamicclient.MCPDynamicClientReturnCode as e:
+            br.stdout = e.stdout
+            br.stderr = e.stderr
+            br.runs = False
+            raise
 
     async def run(self, message: Message, updater: TaskUpdater) -> None:
         """Green agent implementation - manages assessment and evaluation.
@@ -267,13 +329,13 @@ class Agent:
             "tier_distribution": {"GOLD": 0, "SILVER": 0, "BRONZE": 0, "FAIL": 0},
         }
 
-        input_text = get_message_text(message)
+        # input_text = get_message_text(message)
         data_file_path = Path("./data")
         test_data = read_from_json(data_file_path)
         limit = self.max_num_prob or len(test_data)
+        mcp_initialized = False
 
         for idx, data in enumerate(test_data[:limit], start=1):
-            timestamp_started = time.time()
             pname = data["problem_name"]
             pid = data["problem_id"]
             pdesc = data["problem_description"]
@@ -292,37 +354,41 @@ class Agent:
             )
             generated_codes = []
 
-            # Try to load from cache first
-            purple_agent_response = None
-            if self.use_cache:
-                purple_agent_response = self._load_cached_response(pname)
-            # If no cache, call the purple agent
-            if purple_agent_response is None:
-                print(
-                    f"@@@ Green agent: Sending message to purple agent... -->\n{pdesc}"
-                )
-                purple_agent_response = await send_message(
-                    self.purple_agent_url,
-                    pdesc,
-                    context_id=pname,
-                )
-            # Cache the response
-            if self.use_cache:
-                self._save_cached_response(pname, purple_agent_response)
-            else:
-                print(f"@@@ Green agent: Using cached response for {pname}")
-
-            res_root = purple_agent_response.root
-            assert isinstance(res_root, SendMessageSuccessResponse)
-            res_result = res_root.result
-            assert isinstance(res_result, Message)
-            text_list = get_text_parts(res_result.parts)
-            file_list = get_file_parts(res_result.parts)
-            assert (
-                len(text_list) == 1
-            ), "Expecting exactly one text part from the purple agent"
-
             try:
+                # Try to load from cache first
+                purple_agent_response = None
+                if self.use_cache:
+                    purple_agent_response = self._load_cached_response(pname)
+                # If no cache, call the purple agent
+                if purple_agent_response is None:
+                    print(
+                        f"@@@ Green agent: Sending message to purple agent... -->\n{pdesc}"
+                    )
+                    timestamp_started = time.time()
+                    purple_agent_response = await send_message(
+                        self.purple_agent_url,
+                        pdesc,
+                        context_id=pname,
+                    )
+                    br.time_used_sec = time.time() - timestamp_started
+
+                # Cache the response
+                if self.use_cache:
+                    self._save_cached_response(pname, purple_agent_response)
+                else:
+                    print(f"@@@ Green agent: Using cached response for {pname}")
+
+                res_root = purple_agent_response.root
+                if not isinstance(res_root, SendMessageSuccessResponse):
+                    raise ValueError(f"Expected SendMessageSuccessResponse, got {type(res_root).__name__}")
+                res_result = res_root.result
+                if not isinstance(res_result, Message):
+                    raise ValueError(f"Expected Message, got {type(res_result).__name__}")
+                text_list = get_text_parts(res_result.parts)
+                file_list = get_file_parts(res_result.parts)
+                if len(text_list) != 1:
+                    raise ValueError(f"Expected exactly one text part from purple agent, got {len(text_list)}")
+
                 # Parse response to find code
                 _PATTERN = re.compile(
                     r"^Code generation successful[^\n]*\n"
@@ -335,70 +401,56 @@ class Agent:
                     raise ValueError(
                         "Could not parse purple agent response. Probably failed to generate the code."
                     )
-                nsize = m.group("nsize")
+                # nsize = m.group("nsize")
                 cli_args = m.group("cli_args")
                 br.cli_args = cli_args
                 print(
                     f"@@@ Green agent: Compile and run the code generated by purple agent..."
                 )
-                await self.mcp_client.initialize()
-                dep_list = []
-                for f in file_list:
-                    generated_codes.append(f.bytes)
-                    try:
-                      created = await self.mcp_client.create_file_from_string(filename=f.name, file_contents = str(f.bytes))
-                      if not created: raise RuntimeError('MCP tool create_file_from_string() return false indicating the file was not created')
-                    except Exception as e:
-                      raise RuntimeError('MCP-tool breakage. Unable to create file on MCP compile-run server:' + str(e))
-
-                try:
-                  br.compile_stdout = await self.mcp_client.make(executable=pname)
-                  br.compile_stderr = self.mcp_client.reponse.stderr
-                  br.compiles       = True
-
-                  try:
-                    br.stdout     = await self.mcp_client.run_executable(executable=pname, args=cli_args)
-                    br.returncode = 0
-                    br.runs       = True
-                  except mcpdynamicclient.MCPDynamicClientReturnCode as e:
-                    br.stdout     = e.stdout
-                    br.stderr     = e.stderr
-                    br.returncode = e.returncode
-                    br.runs       = False
-                  except Exception as e:
-                    raise RuntimeError('MCP-tool breakage. Unable to run executable:' + str(e))
-                except mcpdynamicclient.MCPDynamicClientReturnCode as e:
-                  br.compile_stdout = e.stdout
-                  br.compile_stderr = e.stderr
-                  br.compiles       = False
-                  br.runs           = False
-                except Exception as e:
-                  raise RuntimeError('MCP-tool breakage. Unable to run compiler:' + str(e))
+                if not mcp_initialized:
+                    await self.mcp_client.initialize()
+                    mcp_initialized = True
+                # Upload files to server
+                await self._create_files_on_server(pname, file_list, generated_codes)
+                # Compile the code
+                await self._compile_code(br, pname)
+                # Run the executable (only if compilation succeeded)
+                if br.compiles:
+                    await self._run_executable(br, pname, cli_args)
 
                 # Run evaluation system
                 print(f"@@@ Green agent: Evaluating generated code...")
                 await self._evaluate_code(br, data, generated_codes)
-                results.append(br)
                 # Update rolling summary
-                summary["total"] += 1
                 if br.runs:
-                  summary["runs_count"] += 1
+                    summary["runs_count"] += 1
                 else:
-                  summary["failure_count"] += 1
+                    summary["failure_count"] += 1
                 # Update evaluation summary
                 if br.tier:
-                  summary["tier_distribution"][br.tier] += 1
+                    summary["tier_distribution"][br.tier] += 1
                 # Optional: per-case artifact (useful for debugging)
                 await updater.add_artifact(
-                  name=f"benchmark_result_{pname}.json",
-                  parts=[TextPart(text=json.dumps(asdict(br), indent=2))],
+                    name=f"benchmark_result_{pname}.json",
+                    parts=[TextPart(text=json.dumps(asdict(br), indent=2))],
                 )
 
             except Exception as e:
-                print(f'Failure in processing problem in green agent --(thus have to skip its evaluation)-----------------\n{type(e).__name__}: {e}\n')
+                # Log error, mark as failed, continue to next problem
+                print(f"@@@ Green agent: ❌ Problem {pname} failed: {type(e).__name__}: {e}")
+                br.tier = "FAIL"
+                br.composite_score = 0.0
+                br.evaluation_summary = {'error': str(e)}
+                summary["failure_count"] += 1
+                summary["tier_distribution"]["FAIL"] += 1
+
             finally:
-                await self.mcp_client.finalize()
-                br.time_used_sec = time.time() - timestamp_started
+                summary["total"] += 1
+                results.append(br)
+
+        if mcp_initialized:
+            await self.mcp_client.finalize()
+            mcp_initialized = False
 
         # Final summary artifact
         times = [r.time_used_sec for r in results]
@@ -449,6 +501,10 @@ class Agent:
             generated_codes: The generated codes
         """
         try:
+            # Guard against empty generated_codes
+            if not generated_codes:
+                raise ValueError("No generated code to evaluate")
+
             # Prepare execution result for evaluators
             execution_result = {
                 'compiles': benchmark_result.compiles,
@@ -460,7 +516,7 @@ class Agent:
             }
             # Run evaluation pipeline
             eval_results = await self.evaluation_pipeline.evaluate(
-                code=generated_codes[0], # Focus on the main file for now
+                code=generated_codes[0],  # Focus on the main file for now
                 problem=problem_data,
                 execution_result=execution_result
             )
@@ -501,9 +557,7 @@ class Agent:
             print(f"@@@ Green agent: ✅ Evaluation complete: Score={aggregated.composite_score:.1f}, Tier={aggregated.overall_tier}")
         except Exception as e:
             print(f"@@@ Green agent: ❌ Evaluation failed: {e}")
-            benchmark_result.composite_score = 0.0
-            benchmark_result.tier = "FAIL"
-            benchmark_result.evaluation_summary = {'error': str(e)}
+            raise # let ourter handler catch it
 
     async def _create_evaluation_report(
         self,
@@ -585,8 +639,4 @@ class Agent:
             name="evaluation_detailed_report.json",
             parts=[TextPart(text=json.dumps(detailed_report, indent=2))],
         )
-
-
-
-
 

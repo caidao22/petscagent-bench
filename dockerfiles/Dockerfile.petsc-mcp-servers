@@ -4,13 +4,12 @@ RUN adduser petscagent
 RUN chown -R petscagent:petscagent $PETSC_DIR
 USER petscagent
 
-RUN git clone --branch debug --single-branch https://gitlab.com/petsc/petsc_mcp_servers.git /home/petscagent/petsc_mcp_servers
+RUN git clone --branch main --single-branch https://gitlab.com/petsc/petsc_mcp_servers.git /home/petscagent/petsc_mcp_servers
 WORKDIR /home/petscagent/petsc_mcp_servers
 
 RUN \
   --mount=type=cache,target=/home/petscagent/.cache/pip,uid=1000 \
   pip install --no-cache-dir fastmcp
 
-# ENTRYPOINT ["sh", "-c", "echo '=== ENV ==='; env; echo '=== FILES ==='; ls -lah; python petsc_compile_run_mcp_server.py"] # for debug
-ENTRYPOINT ["sh", "-c", "echo '=== ENV ==='; env; echo '=== FILES ==='; ls -lah; python petsc_compile_run_mcp_server.py"]
+ENTRYPOINT ["python", "petsc_compile_run_mcp_server.py"]
 EXPOSE 8080

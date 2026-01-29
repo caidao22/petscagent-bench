@@ -6,16 +6,13 @@ evaluation:
   enable_metrics: true
   enable_quality: true
   
-  # LLM settings for quality evaluators and agents
+  # LLM settings for quality evaluators
   llm:
-    model: "gpt51"   # LLM for green agent (quality evaluation)
-    purple_model: null            # LLM for purple agent (code generation); null = use model
-    api_base_url: "https://apps-dev.inside.anl.gov/argoapi/v1"            # API base URL (e.g., "https://api.openai.com/v1"); null = use default
-                                  # For OpenAI-compatible APIs (ends with /v1), use base URL:
-                                  # Example: "https://apps-dev.inside.anl.gov/argoapi/v1"
-                                  # For custom APIs, use base URL without endpoint path
-    temperature: 0                # Set to 0 only for reproducibility
-    max_concurrent_calls: 3       # Rate limiting
+    model: "gemini/gemini-3-flash-preview"
+    purple_model: null # LLM for purple agent (code generation); null = use model
+    api_base_url: null # Use "https://apps-dev.inside.anl.gov/argoapi/v1" for Argo
+    temperature: 0           # Set to 0 only for reproducibility
+    max_concurrent_calls: 3  # Rate limiting
   
   # Performance settings
   parallel_evaluation: true

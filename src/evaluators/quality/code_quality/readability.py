@@ -10,7 +10,6 @@ from src.util.llm_client import LLMClient
 
 class ReadabilityResponse(BaseModel):
     """Structured response for readability evaluation."""
-
     score: float  # 0-10
     confidence: float  # 0-1
     feedback: str
@@ -20,14 +19,14 @@ class ReadabilityResponse(BaseModel):
 
 class ReadabilityQuality(Evaluator):
     """Evaluates code readability using LLM or static analysis.
-
+    
     Assesses:
     - Variable naming clarity
     - Code organization and structure
     - Logical flow
     - Ease of understanding
     """
-
+    
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
         self.use_llm = config.get('use_llm', True) if config else True
@@ -37,19 +36,19 @@ class ReadabilityQuality(Evaluator):
             llm_temp = config.get('llm_temperature', 0.3) if config else 0.3
             llm_api_base_url = config.get('llm_api_base_url') if config else None
             self.llm = LLMClient(model=llm_model, temperature=llm_temp, api_base_url=llm_api_base_url)
-
+    
     @property
     def name(self) -> str:
         return "readability"
-
+    
     @property
     def evaluator_type(self) -> EvaluatorType:
         return EvaluatorType.QUALITY
-
+    
     @property
     def evaluation_method(self) -> str:
         return f"llm_{self.llm.model}" if self.use_llm else "static_analysis"
-
+    
     async def evaluate(
         self,
         code: str,
@@ -57,22 +56,22 @@ class ReadabilityQuality(Evaluator):
         execution_result: Optional[Dict[str, Any]] = None
     ) -> EvaluationResult:
         """Evaluate code readability.
-
+        
         Args:
             code: The generated code to evaluate
             problem: Problem specification (for context)
             execution_result: Not used for readability
-
+        
         Returns:
             EvaluationResult with quality_score (0-1)
         """
         start_time = time.time()
-
+        
         if self.use_llm:
             result = await self._evaluate_with_llm(code, problem)
         else:
             result = self._evaluate_with_static_analysis(code)
-
+        
         return EvaluationResult(
             evaluator_name=self.name,
             evaluator_type=self.evaluator_type,
@@ -84,7 +83,7 @@ class ReadabilityQuality(Evaluator):
             evaluation_method=self.evaluation_method,
             execution_time_ms=(time.time() - start_time) * 1000
         )
-
+    
     async def _evaluate_with_llm(self, code: str, problem: Dict[str, Any]) -> Dict[str, Any]:
         """Evaluate readability using LLM."""
         prompt = f"""Evaluate the readability of this PETSc C code.
@@ -112,7 +111,7 @@ Provide:
 
 Return as JSON.
 """
-
+        
         try:
             response = await self.llm.structured_completion(
                 prompt=prompt,
@@ -135,27 +134,25 @@ Return as JSON.
                 'feedback': f"LLM evaluation failed: {str(e)}",
                 'metadata': {'error': str(e)}
             }
-
+    
     def _evaluate_with_static_analysis(self, code: str) -> Dict[str, Any]:
         """Evaluate readability using static heuristics."""
         score = 0.5  # Start at neutral
         feedback_items = []
-
+        
         lines = code.split('\n')
         non_empty_lines = [l for l in lines if l.strip()]
-
+        
         # Check average line length
         if non_empty_lines:
-            avg_line_length = sum(len(line) for line in non_empty_lines) / len(
-                non_empty_lines
-            )
+            avg_line_length = sum(len(line) for line in non_empty_lines) / len(non_empty_lines)
             if avg_line_length < 80:
                 score += 0.1
                 feedback_items.append("Good: reasonable line length")
             elif avg_line_length > 120:
                 score -= 0.1
                 feedback_items.append("Issue: very long lines")
-
+        
         # Check for comments
         comment_lines = sum(1 for line in lines if '//' in line or '/*' in line)
         comment_ratio = comment_lines / max(len(non_empty_lines), 1)
@@ -165,26 +162,23 @@ Return as JSON.
         else:
             score -= 0.1
             feedback_items.append("Issue: lacks comments")
-
+        
         # Check for meaningful variable names (heuristic: length > 2)
         import re
-
         variables = re.findall(r'\b[a-z_][a-z0-9_]*\b', code.lower())
-        meaningful = sum(
-            1 for v in variables if len(v) > 2 and v not in ['int', 'for', 'if']
-        )
+        meaningful = sum(1 for v in variables if len(v) > 2 and v not in ['int', 'for', 'if'])
         if variables and meaningful / len(variables) > 0.6:
             score += 0.15
             feedback_items.append("Good: descriptive variable names")
-
+        
         # Check indentation consistency
         indents = [len(line) - len(line.lstrip()) for line in lines if line.strip()]
         if indents and all(i % 2 == 0 or i % 4 == 0 for i in indents):
             score += 0.1
             feedback_items.append("Good: consistent indentation")
-
+        
         score = max(0.0, min(1.0, score))  # Clamp to [0, 1]
-
+        
         return {
             'score': score,
             'confidence': 0.6,  # Static analysis is less confident

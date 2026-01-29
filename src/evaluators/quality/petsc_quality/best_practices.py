@@ -10,7 +10,6 @@ from src.util.llm_client import LLMClient
 
 class BestPracticesResponse(BaseModel):
     """Structured response for best practices evaluation."""
-
     score: float  # 0-10
     confidence: float  # 0-1
     feedback: str
@@ -22,33 +21,33 @@ class BestPracticesResponse(BaseModel):
 
 class PETScBestPracticesQuality(Evaluator):
     """Evaluates adherence to PETSc best practices.
-
+    
     Checks for:
     - Use of command-line options (-ksp_type, -pc_type, etc.)
     - PetscViewer usage for output
     - Runtime configurability
     - Proper use of PETSc logging
     """
-
+    
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
         llm_model = config.get('llm_model', 'gpt-4o-mini') if config else 'gpt-4o-mini'
         llm_temp = config.get('llm_temperature', 0.3) if config else 0.3
         llm_api_base_url = config.get('llm_api_base_url') if config else None
         self.llm = LLMClient(model=llm_model, temperature=llm_temp, api_base_url=llm_api_base_url)
-
+    
     @property
     def name(self) -> str:
         return "petsc_best_practices"
-
+    
     @property
     def evaluator_type(self) -> EvaluatorType:
         return EvaluatorType.QUALITY
-
+    
     @property
     def evaluation_method(self) -> str:
         return f"llm_{self.llm.model}"
-
+    
     async def evaluate(
         self,
         code: str,
@@ -57,7 +56,7 @@ class PETScBestPracticesQuality(Evaluator):
     ) -> EvaluationResult:
         """Evaluate PETSc best practices."""
         start_time = time.time()
-
+        
         prompt = f"""Evaluate PETSc best practices in this code.
 
 Code:
@@ -83,10 +82,11 @@ Provide:
 
 Return as JSON.
 """
-
+        
         try:
             response = await self.llm.structured_completion(
-                prompt=prompt, response_model=BestPracticesResponse
+                prompt=prompt,
+                response_model=BestPracticesResponse
             )
             return EvaluationResult(
                 evaluator_name=self.name,
@@ -96,14 +96,14 @@ Return as JSON.
                 confidence=response.confidence,
                 feedback=response.feedback,
                 metadata={
-                    "raw_score": response.score,
-                    "uses_command_line_options": response.uses_command_line_options,
-                    "uses_viewers": response.uses_viewers,
-                    "configurable": response.configurable,
-                    "practices_followed": response.practices_followed,
+                    'raw_score': response.score,
+                    'uses_command_line_options': response.uses_command_line_options,
+                    'uses_viewers': response.uses_viewers,
+                    'configurable': response.configurable,
+                    'practices_followed': response.practices_followed,
                 },
                 evaluation_method=self.evaluation_method,
-                execution_time_ms=(time.time() - start_time) * 1000,
+                execution_time_ms=(time.time() - start_time) * 1000
             )
         except Exception as e:
             return EvaluationResult(
@@ -113,7 +113,7 @@ Return as JSON.
                 quality_score=None,
                 confidence=0.0,
                 feedback=f"LLM evaluation failed: {str(e)}",
-                metadata={"error": str(e)},
+                metadata={'error': str(e)},
                 evaluation_method=self.evaluation_method,
-                execution_time_ms=(time.time() - start_time) * 1000,
+                execution_time_ms=(time.time() - start_time) * 1000
             )

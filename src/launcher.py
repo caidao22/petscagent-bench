@@ -14,11 +14,10 @@ import multiprocessing
 import asyncio
 import json
 import mcp
-from typing import Optional
 from src.green_agent.server import start_green_agent
-from src.green_agent.agent import load_evaluation_config
 from src.purple_agent.petsc_agent import start_purple_agent
 from src.util.a2a_comm import wait_agent_ready, send_message
+from src.green_agent.agent import load_evaluation_config
 import os
 import dotenv
 
@@ -28,59 +27,55 @@ dotenv.load_dotenv()
 from petsc_compile_run_mcp_server import main as start_mcp_server
 
 
-def run_green_agent(agent_llm: str):
+def run_green_agent(agent_llm):
     """Execute the Green Agent in a separate process.
-
+    
     This wrapper function is needed for multiprocessing.Process,
     which requires a synchronous entry point. The function creates
     a new asyncio event loop and runs the async green agent server.
-
-    Args:
-        agent_llm: LLM model for the green agent (from config or default).
     """
     asyncio.run(start_green_agent(agent_llm=agent_llm))
 
 
-def run_purple_agent(agent_llm: str, api_base_url: Optional[str] = None):
+def run_purple_agent(agent_llm, api_base_url=None):
     """Execute the Purple Agent in a separate process.
-
+    
     Starts the Purple Agent with a specific LLM configuration.
-    Model and API base URL are read from config/evaluation_config.yaml
-    (evaluation.llm.model/purple_model and evaluation.llm.api_base_url).
-
-    Args:
-        agent_llm: LLM model for the purple agent (from config or default).
-        api_base_url: Optional API base URL for LLM API calls.
+    The LLM model can be changed here to test different models.
+    
+    Currently configured to use: openai/gpt-5.2
+    Other options: gemini/gemini-2.5-flash, openai/gpt-4o, etc.
     """
     asyncio.run(start_purple_agent(agent_llm=agent_llm, api_base_url=api_base_url))
+    # asyncio.run(start_purple_agent(agent_llm="openai/google-claude-45-opus")) # test AskSage
 
 
 async def launch_evaluation():
     """Main launcher function - initiates and coordinates the evaluation process.
-
+    
     This function orchestrates the complete benchmark workflow:
-
+    
     1. Process Initialization:
        - Spawns the Green Agent process (assessment manager)
        - Spawns the Purple Agent process (code generator under test)
        - Spawns the MCP server process (PETSc compilation/execution tools)
-
+    
     2. Health Checks:
        - Waits for each agent to become ready (HTTP health check)
        - Ensures all components are operational before proceeding
-
+    
     3. Task Execution:
        - Sends the evaluation task to the Green Agent
        - Green Agent autonomously manages the evaluation workflow
        - Waits for evaluation to complete
-
+    
     4. Cleanup:
        - Terminates all spawned processes
        - Ensures clean shutdown
-
+    
     The evaluation results are automatically saved by the Green Agent
     to the 'output/' directory.
-
+    
     Raises:
         AssertionError: If any agent fails to become ready within timeout
         Exception: If communication or execution errors occur
@@ -91,17 +86,11 @@ async def launch_evaluation():
     mcp_server_url = "http://localhost:8080/mcp"  # MCP tools server
     green_id = "019bb856-c8bf-7390-8c4f-bced52276932" # AgentBeats ID
     purple_id = ""
-
-    # Load model(s) and API base URL from config (config/evaluation_config.yaml)
     config = load_evaluation_config()
-    llm_cfg = config.get("evaluation", {}).get("llm", {})
-    green_model = llm_cfg.get("model", "openai/gpt-4o-mini")
-    purple_model = llm_cfg.get("purple_model") or green_model
-    api_base_url = llm_cfg.get("api_base_url")
-    print(f"Green agent model: {green_model}, Purple agent model: {purple_model}")
-    if api_base_url:
-        print(f"API base URL: {api_base_url}")
-
+    llm_cfg = config.get('evaluation', {}).get('llm', {})
+    green_model = llm_cfg.get('model', 'openai/gpt-4o-mini')
+    purple_model = llm_cfg.get('purple_model') or green_model
+    api_base_url = llm_cfg.get('api_base_url')
     # Step 1: Start Green Agent (assessment manager)
     print("Launching green agent...")
     p_green = multiprocessing.Process(target=run_green_agent, args=(green_model,))
@@ -145,7 +134,7 @@ Purple agent's AgentBeats ID is
     print("Task description:")
     print(task_text)
     print("Sending...")
-
+    
     # Send message and wait for completion
     # The Green Agent will autonomously manage the entire evaluation workflow
     response = await send_message(green_url, task_text)

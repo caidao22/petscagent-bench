@@ -17,7 +17,6 @@ import uvicorn
 import dotenv
 import os
 import json
-from typing import Optional
 from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -97,7 +96,7 @@ class PetscAgentExecutor(AgentExecutor):
         ctx_id_to_messages: Dict mapping context IDs to conversation histories
     """
 
-    def __init__(self, model: str, api_base_url: Optional[str] = None):
+    def __init__(self, model: str, api_base_url: str = None):
         """Initialize the executor with a specific LLM model.
 
         Args:
@@ -178,34 +177,26 @@ class PetscAgentExecutor(AgentExecutor):
                 litellm.ssl_verify = False
                 # Generate PETSc code using the LLM with JSON schema
                 completion_kwargs = {
-                    "messages": messages,
-                    "model": self.model,
-                    "temperature": 0.0,
-                    "response_format": ProblemResponse,
+                    'messages': messages,
+                    'model': self.model,
+                    'temperature': 0.0,
+                    'response_format': ProblemResponse
                 }
                 if self.api_base_url:
-                    # Check if this is an OpenAI-compatible endpoint (ends with /v1)
-                    is_openai_compatible = self.api_base_url.rstrip("/").endswith("/v1")
-
+                    is_openai_compatible = self.api_base_url.rstrip('/').endswith('/v1')
                     if is_openai_compatible:
-                        # For OpenAI-compatible endpoints, use "openai/" prefix
-                        # LiteLLM needs provider prefix even for custom OpenAI-compatible APIs
                         model_name = self.model
-                        if "/" in model_name:
-                            # Already has provider prefix, use as-is
-                            completion_kwargs["model"] = model_name
+                        if '/' in model_name:
+                            completion_kwargs['model'] = model_name
                         else:
-                            # Add openai/ prefix for OpenAI-compatible endpoint
-                            completion_kwargs["model"] = f"openai/{model_name}"
+                            completion_kwargs['model'] = f"openai/{model_name}"
                     else:
-                        # For custom APIs, LiteLLM requires "custom/" prefix
                         model_name = self.model
-                        if "/" in model_name:
-                            model_name = model_name.split("/", 1)[1]
-                        if not model_name.startswith("custom/"):
-                            completion_kwargs["model"] = f"custom/{model_name}"
-                    # Strip trailing slash from API base URL
-                    completion_kwargs["api_base"] = self.api_base_url.rstrip("/")
+                        if '/' in model_name:
+                            model_name = model_name.split('/', 1)[1]
+                        if not model_name.startswith('custom/'):
+                            completion_kwargs['model'] = f"custom/{model_name}"
+                    completion_kwargs['api_base'] = self.api_base_url.rstrip('/')
                 response = completion(**completion_kwargs)
             # Extract the generated content from LLM response
             content = response.choices[0].message.model_dump()["content"]
@@ -223,7 +214,7 @@ class PetscAgentExecutor(AgentExecutor):
                 fwb = FileWithBytes(
                     name=entry["filename"],
                     bytes=entry["code"].encode("utf-8"),
-                    mime_type="text/plain",
+                    mime_type="text/plain"
                 )
                 parts_list.append(FilePart(file=fwb))
             # Send the successful response back to the client
@@ -254,8 +245,7 @@ class PetscAgentExecutor(AgentExecutor):
         """
         raise NotImplementedError
 
-
-def start_purple_agent(host: str="localhost", port: int=9002, card_url: str=None, agent_llm: str="gemini/gemini-3-flash-preview", api_base_url: Optional[str]=None):
+def start_purple_agent(host: str="localhost", port: int=9002, card_url: str=None, agent_llm: str="gemini/gemini-3-flash-preview", api_base_url: str = None):
     """
     Start the Purple Agent A2A HTTP service.
 
@@ -289,22 +279,12 @@ def start_purple_agent(host: str="localhost", port: int=9002, card_url: str=None
     )
     uvicorn.run(app.build(), host=host, port=port)
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the purple agent.")
-    parser.add_argument(
-        "--host", type=str, default="localhost", help="Host to bind the server"
-    )
-    parser.add_argument(
-        "--port", type=int, default=9002, help="Port to bind the server"
-    )
+    parser.add_argument("--host", type=str, default="localhost", help="Host to bind the server")
+    parser.add_argument("--port", type=int, default=9002, help="Port to bind the server")
     parser.add_argument("--card-url", type=str, help="External URL for the agent card")
-    parser.add_argument(
-        "--agent-llm",
-        type=str,
-        default="gemini/gemini-3-flash-preview",
-        help="LLM model to use, such as gemini/gemini-3-flash-preview, gemini/gemini-2.5-flash, gpt-5.2",
-    )
+    parser.add_argument("--agent-llm", type=str, default="gemini/gemini-3-flash-preview", help="LLM model to use, such as gemini/gemini-3-flash-preview, gemini/gemini-2.5-flash, gpt-5.2")
     args = parser.parse_args()
 
     start_purple_agent(args.host, args.port, args.card_url, args.agent_llm)

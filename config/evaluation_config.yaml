@@ -6,10 +6,12 @@ evaluation:
   enable_metrics: true
   enable_quality: true
   
-  # LLM settings for quality evaluators
+  # LLM settings for quality evaluators and agents
   llm:
-    temperature: 0           # Set to 0 only for reproducibility
-    max_concurrent_calls: 3  # Rate limiting
+    model: "openai/gpt-4o-mini"   # LLM for green agent (quality evaluation)
+    purple_model: null            # LLM for purple agent (code generation); null = use model
+    temperature: 0                # Set to 0 only for reproducibility
+    max_concurrent_calls: 3       # Rate limiting
   
   # Performance settings
   parallel_evaluation: true

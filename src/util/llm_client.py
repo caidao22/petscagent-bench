@@ -2,8 +2,11 @@ import os
 import json
 from typing import Any, Dict, Optional, Type
 from pydantic import BaseModel
+import litellm
 from litellm import acompletion
 import dotenv
+
+USE_ASKSAGE = False # do not change unless you know how to use ANL AskSage
 
 dotenv.load_dotenv()
 
@@ -45,13 +48,28 @@ class LLMClient:
         messages.append({"role": "user", "content": prompt})
 
         try:
-            # Use JSON mode
-            response = await acompletion(
-                model=self.model,
-                messages=messages,
-                temperature=self.temperature,
-                response_format={"type": "json_object"},
-            )
+            if USE_ASKSAGE:
+                # ANL AskSage requires ASKSAGE_API_KEY and SSL_CERT_FILE to be set in the environment.
+                # The litellm completion API cannot control ssl_verify effectively. So we have to rely on litellm.ssl_verify.
+                # But other LLMs may not work if litellm.ssl_verify is not reset properly.
+                litellm.ssl_verify = os.environ["SSL_CERT_FILE"]
+                response = await acompletion(
+                        api_key=os.environ["ASKSAGE_API_KEY"],
+                        api_base="https://api.asksage.anl.gov/server/v1",
+                        model=self.model,
+                        messages=messages,
+                        temperature=self.temperature,
+                        response_format={"type": "json_object"},
+                    )
+            else:
+                litellm.ssl_verify = False
+                # Use JSON mode
+                response = await acompletion(
+                    model=self.model,
+                    messages=messages,
+                    temperature=self.temperature,
+                    response_format={"type": "json_object"},
+                )
             # Parse JSON response
             content = response.choices[0].message.content
             data = json.loads(content)

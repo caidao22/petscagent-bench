@@ -25,8 +25,12 @@ from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import AgentSkill, AgentCard, AgentCapabilities
 from a2a.utils import new_agent_parts_message
 from a2a.types import TextPart, FilePart, FileWithBytes
+import litellm
 from litellm import completion
+from pydantic import BaseModel
 from loguru import logger
+
+USE_ASKSAGE = False # do not change unless you know how to use ANL AskSage
 
 dotenv.load_dotenv()
 
@@ -34,19 +38,14 @@ dotenv.load_dotenv()
 # This ensures the LLM produces output in a structured, parseable format
 SYSTEM_CODE_CONTRACT = (
     "You are a code-generation agent.\n"
-    "You MUST output valid C/C++/CUDA code.\n\n"
-    "Output contract (must follow exactly):\n"
-    "- Output JSON with 'codes', 'nsize' and 'cli_args'\n"
-    "- 'codes' MUST be a list of objects for source code, each with:\n"
-    "    - 'filename': the name of the file\n"
-    "    - 'code': the full contents of that file\n"
-    "- 'nsize' is the number of MPI processes to run with, use 1 for sequential codes\n"
-    "- 'cli_args' contains command line arguments (e.g., '-ts_type rosw -ts_monitor')\n"
-    "- Any explanation MUST be inside a C block comment /* ... */\n"
-    "- Do NOT use Markdown, backticks, LaTeX, or plain text outside comments\n"
-    "- The first non-comment line must be valid C/C++/CUDA code\n"
-    "- the first file must be the main file\n"
-    "- Violating this contract is a hard failure\n"
+    "Return ONLY a single raw JSON object. No markdown, no backticks, no code blocks, no explanation outside the JSON.\n"
+    "Top-level JSON keys MUST be exactly: 'codes', 'nsize', 'cli_args' (no additional keys).\n\n"
+    "Rules:\n"
+    "- 'codes': a list of objects with 'filename' and 'code'. Code must be valid C/C++/CUDA.\n"
+    "- 'nsize': the number of MPI processes (use 1 for sequential).\n"
+    "- 'cli_args': command line arguments string.\n"
+    "- First file in 'codes' is the main file.\n"
+    "- Any explanations MUST be inside C block comments /* ... */ within the code strings.\n"
 )
 
 
@@ -147,27 +146,51 @@ class PetscAgentExecutor(AgentExecutor):
             }
         )
 
+        class CodeFile(BaseModel):
+            filename: str
+            code: str
+
+        class ProblemResponse(BaseModel):
+            codes: list[CodeFile]
+            nsize: int    # e.g. 1 for sequential codes
+            cli_args: str # e.g. "-ts_type beuler -ts_monitor"
+
         try:
-            # Generate PETSc code using the LLM
-            response = completion(
-                messages=messages,
-                model=self.model,
-                # custom_llm_provider="openai",
-                temperature=0.0,
-            )
+            if USE_ASKSAGE:
+                # ANL AskSage requires ASKSAGE_API_KEY and SSL_CERT_FILE to be set in the environment.
+                # The litellm completion API cannot control ssl_verify effectively. So we have to rely on litellm.ssl_verify.
+                # But other LLMs may not work if litellm.ssl_verify is not reset properly.
+                litellm.ssl_verify = os.environ["SSL_CERT_FILE"]
+                # Generate PETSc code using the LLM with JSON schema
+                response = completion(
+                    api_key=os.environ["ASKSAGE_API_KEY"],
+                    api_base="https://api.asksage.anl.gov/server/v1",
+                    messages=messages,
+                    model=self.model,
+                    temperature=0.0,
+                    response_format=ProblemResponse
+                )
+            else:
+                litellm.ssl_verify = False
+                # Generate PETSc code using the LLM with JSON schema
+                response = completion(
+                    messages=messages,
+                    model=self.model,
+                    temperature=0.0,
+                    response_format=ProblemResponse
+                )
             # Extract the generated content from LLM response
             content = response.choices[0].message.model_dump()["content"]
-
-            # Remove markdown code block wrapper that some LLMs add
+            # Remove markdown code block wrapper that some LLMs such as Claude add
             # This ensures we get clean JSON for parsing
             content = content.replace('```json\n','').replace('```','')
-
+            if isinstance(content, str):
+                content = json.loads(content)
             # Parse the JSON response
-            obj = json.loads(content)
-            nsize = obj["nsize"]
-            cli_args = obj["cli_args"]
+            nsize = content["nsize"]
+            cli_args = content["cli_args"]
             parts_list = [TextPart(text=f"Code generation successful ✅\nnsize: {nsize}\ncli_args: {cli_args}\n")]
-            for entry in obj["codes"]:
+            for entry in content["codes"]:
                 # Create file object with code content
                 fwb = FileWithBytes(
                     name=entry["filename"],

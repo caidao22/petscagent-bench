@@ -46,6 +46,7 @@ def run_purple_agent():
     Other options: gemini/gemini-2.5-flash, openai/gpt-4o, etc.
     """
     asyncio.run(start_purple_agent(agent_llm="gemini/gemini-3-flash-preview"))
+    # asyncio.run(start_purple_agent(agent_llm="openai/google-claude-45-opus")) # test AskSage
 
 
 async def launch_evaluation():

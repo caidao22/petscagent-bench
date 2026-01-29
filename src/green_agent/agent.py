@@ -36,6 +36,7 @@ from typing import Any, Dict, List, Optional
 import dotenv
 
 dotenv.load_dotenv()
+
 import mcpdynamicclient
 from petsc_compile_run_mcp_client import PetscCompileRunMCPClient
 
@@ -396,7 +397,6 @@ class Agent:
                 file_list = get_file_parts(res_result.parts)
                 if len(text_list) != 1:
                     raise ValueError(f"Expected exactly one text part from purple agent, got {len(text_list)}")
-
                 # Parse response to find code
                 _PATTERN = re.compile(
                     r"^Code generation successful[^\n]*\n"

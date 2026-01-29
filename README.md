@@ -190,12 +190,11 @@ evaluation:
   parallel_evaluation: true   # Run evaluators in parallel
   
   llm:
-    model: "openai/gpt-4o-mini"  # LLM for quality evaluation
-    temperature: 0.3             # LLM temperature
-    max_concurrent_calls: 3      # Rate limiting for LLM calls
-  
-  thresholds:
-    min_llm_confidence: 0.7      # Minimum confidence for LLM evaluations
+    model: "openai/gpt-4o-mini"   # LLM for Green Agent (quality evaluators)
+    purple_model: null            # LLM for Purple Agent (code generation); null = use model
+    api_base_url: null            # API base URL; null = provider default (e.g. api.openai.com)
+    temperature: 0                 # Set to 0 for reproducibility
+    max_concurrent_calls: 3       # Rate limiting for LLM calls
 
 scoring:
   weights:
@@ -211,6 +210,12 @@ scoring:
     silver: 70    # Minimum score for SILVER tier
     bronze: 50    # Minimum score for BRONZE tier
 ```
+
+**LLM options:**
+
+- **`model`** — Model used by the **Green Agent** for quality evaluations (readability, code style, algorithm appropriateness, etc.). Use a LiteLLM-style name, e.g. `openai/gpt-4o-mini`, `gemini/gemini-3-flash-preview`.
+- **`purple_model`** — Model used by the **Purple Agent** for code generation. If `null`, the Green Agent `model` is used for both. Set a different value to test another model (e.g. `gemini/gemini-2.5-flash`) while keeping the same evaluator model.
+- **`api_base_url`** — Base URL for the LLM API. Leave `null` to use each provider’s default (e.g. `https://api.openai.com/v1`). Set this to use a custom or proxy endpoint (e.g. `https://apps-dev.inside.anl.gov/argoapi/v1` for Argo). For OpenAI-compatible APIs the URL should end with `/v1`; the client will use the appropriate LiteLLM provider prefix.
 
 ## Evaluation System
 

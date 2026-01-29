@@ -14,6 +14,7 @@ import multiprocessing
 import asyncio
 import json
 import mcp
+from typing import Optional
 from src.green_agent.server import start_green_agent
 from src.green_agent.agent import load_evaluation_config
 from src.purple_agent.petsc_agent import start_purple_agent
@@ -40,17 +41,18 @@ def run_green_agent(agent_llm: str):
     asyncio.run(start_green_agent(agent_llm=agent_llm))
 
 
-def run_purple_agent(agent_llm: str):
+def run_purple_agent(agent_llm: str, api_base_url: Optional[str] = None):
     """Execute the Purple Agent in a separate process.
 
     Starts the Purple Agent with a specific LLM configuration.
-    Model is read from config/evaluation_config.yaml (evaluation.llm.model
-    or evaluation.llm.purple_model).
+    Model and API base URL are read from config/evaluation_config.yaml
+    (evaluation.llm.model/purple_model and evaluation.llm.api_base_url).
 
     Args:
         agent_llm: LLM model for the purple agent (from config or default).
+        api_base_url: Optional API base URL for LLM API calls.
     """
-    asyncio.run(start_purple_agent(agent_llm=agent_llm))
+    asyncio.run(start_purple_agent(agent_llm=agent_llm, api_base_url=api_base_url))
 
 
 async def launch_evaluation():
@@ -84,18 +86,21 @@ async def launch_evaluation():
         Exception: If communication or execution errors occur
     """
     # Define service endpoints
-    green_url = "http://localhost:9001"  # Green Agent A2A server
-    purple_url = "http://localhost:9002"  # Purple Agent A2A server
+    green_url = "http://localhost:9001"    # Green Agent A2A server
+    purple_url = "http://localhost:9002"   # Purple Agent A2A server
     mcp_server_url = "http://localhost:8080/mcp"  # MCP tools server
-    green_id = "019bb856-c8bf-7390-8c4f-bced52276932"  # AgentBeats ID
+    green_id = "019bb856-c8bf-7390-8c4f-bced52276932" # AgentBeats ID
     purple_id = ""
 
-    # Load model(s) from config (config/evaluation_config.yaml)
+    # Load model(s) and API base URL from config (config/evaluation_config.yaml)
     config = load_evaluation_config()
     llm_cfg = config.get("evaluation", {}).get("llm", {})
     green_model = llm_cfg.get("model", "openai/gpt-4o-mini")
     purple_model = llm_cfg.get("purple_model") or green_model
+    api_base_url = llm_cfg.get("api_base_url")
     print(f"Green agent model: {green_model}, Purple agent model: {purple_model}")
+    if api_base_url:
+        print(f"API base URL: {api_base_url}")
 
     # Step 1: Start Green Agent (assessment manager)
     print("Launching green agent...")
@@ -106,7 +111,7 @@ async def launch_evaluation():
 
     # Step 2: Start Purple Agent (code generator being tested)
     print("Launching purple agent...")
-    p_purple = multiprocessing.Process(target=run_purple_agent, args=(purple_model,))
+    p_purple = multiprocessing.Process(target=run_purple_agent, args=(purple_model, api_base_url))
     p_purple.start()
     assert await wait_agent_ready(purple_url), "purple agent not ready in time"
     print("purple agent is ready.")

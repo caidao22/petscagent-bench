@@ -51,48 +51,32 @@ class LLMClient:
         messages.append({"role": "user", "content": prompt})
 
         try:
-            if USE_ASKSAGE:
-                # ANL AskSage requires ASKSAGE_API_KEY and SSL_CERT_FILE to be set in the environment.
-                # The litellm completion API cannot control ssl_verify effectively. So we have to rely on litellm.ssl_verify.
-                # But other LLMs may not work if litellm.ssl_verify is not reset properly.
-                litellm.ssl_verify = os.environ["SSL_CERT_FILE"]
-                response = await acompletion(
-                        api_key=os.environ["ASKSAGE_API_KEY"],
-                        api_base="https://api.asksage.anl.gov/server/v1",
-                        model=self.model,
-                        messages=messages,
-                        temperature=self.temperature,
-                        response_format={"type": "json_object"},
-                    )
-            else:
-                litellm.ssl_verify = False
-                # Use JSON mode
-                completion_kwargs = {
-                    'model': self.model,
-                    'messages': messages,
-                    'temperature': self.temperature,
-                    'response_format': {"type": "json_object"},
-                }
-                if self.api_base_url:
-                    is_openai_compatible = self.api_base_url.rstrip('/').endswith('/v1')
-                    if is_openai_compatible:
-                        model_name = self.model
-                        if '/' in model_name:
-                            completion_kwargs['model'] = model_name
-                        else:
-                            completion_kwargs['model'] = f"openai/{model_name}"
-                    else:
-                        model_name = self.model
-                        if '/' in model_name:
-                            model_name = model_name.split('/', 1)[1]
-                        if not model_name.startswith('custom/'):
-                            completion_kwargs['model'] = f"custom/{model_name}"
-                    completion_kwargs['api_base'] = self.api_base_url.rstrip('/')
-                response = await acompletion(**completion_kwargs)
+            # Use JSON mode
+            completion_kwargs = {
+                'model': self.model,
+                'messages': messages,
+                'temperature': self.temperature,
+                'response_format': {"type": "json_object"},
+            }
+            litellm.ssl_verify = False
+            if self.api_base_url:
+                completion_kwargs['api_base'] = self.api_base_url
+                is_asksage_endpoint = self.api_base_url.startswith('https://api.asksage.anl.gov')
+                if is_asksage_endpoint:
+                    litellm.ssl_verify = os.environ["ASKSAGE_SSL_CERT_FILE"]
+                    completion_kwargs['api_key'] = os.environ["ASKSAGE_API_KEY"]
+            response = await acompletion(**completion_kwargs)
             # Parse JSON response
             content = response.choices[0].message.content
-            data = json.loads(content)
-
+            if isinstance(content, str):
+                # Remove markdown code block wrapper that some LLMs such as Claude add
+                # This ensures we get clean JSON for parsing
+                if content.startswith("```"):
+                    content = content.split("```", 2)[1]
+                    content = content.lstrip("json").strip()
+                data = json.loads(content)
+            else:
+                raise TypeError(f"Expected string content from response, got {type(content)}")
             # Handle case where LLM returns array instead of object
             if isinstance(data, list) and data:
                 # Use first element if it's an array of objects

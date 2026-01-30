@@ -29,8 +29,8 @@ import litellm
 from litellm import completion
 from pydantic import BaseModel
 from loguru import logger
-
-USE_ASKSAGE = False # do not change unless you know how to use ANL AskSage
+from typing import Any, Dict
+from pathlib import Path
 
 dotenv.load_dotenv()
 
@@ -48,6 +48,46 @@ SYSTEM_CODE_CONTRACT = (
     "- Any explanations MUST be inside C block comments /* ... */ within the code strings.\n"
 )
 
+def load_purple_agent_config(config_path: str = "config/purple_agent_config.yaml") -> Dict[str, Any]:
+    """Load purple agent configuration from file or use defaults.
+
+    Supports both JSON and YAML formats. Format is auto-detected by file extension.
+
+    Args:
+        config_path: Path to the configuration file
+
+    Returns:
+        Configuration dictionary
+    """
+    config_file = Path(config_path)
+
+    if config_file.exists():
+        try:
+            with open(config_file, 'r') as f:
+                # Detect format by extension
+                if config_file.suffix.lower() in ['.yaml', '.yml']:
+                    import yaml
+                    config_data = yaml.safe_load(f)
+                else:
+                    config_data = json.load(f)
+
+            print(f"@@@ Purple agent: ✅ Loaded agent config from {config_path}")
+            return config_data
+        except Exception as e:
+            print(f"@@@ Purple agent: ⚠️ Failed to load config from {config_path}: {e}")
+            print(f"@@@ Purple agent: Using default evaluation configuration")
+    else:
+        print(f"@@@ Purple agent: Config file {config_path} not found, using defaults")
+
+    # Fall back to default configuration
+    return {
+        'llm': {
+            'model': 'gemini/gemini-3-flash-preview',
+            'api_base': None,
+            'temperature': 0.3,
+            'max_concurrent_calls': 3,
+        },
+    }
 
 def prepare_purple_agent_card(url):
     """Create an A2A agent card for the Purple Agent.
@@ -96,14 +136,17 @@ class PetscAgentExecutor(AgentExecutor):
         ctx_id_to_messages: Dict mapping context IDs to conversation histories
     """
 
-    def __init__(self, model: str):
+    def __init__(self, model: str, api_base_url: str = None):
         """Initialize the executor with a specific LLM model.
 
         Args:
             model: LLM model string compatible with litellm
                    (e.g., "openai/gpt-4o", "gemini/gemini-2.5-flash")
+            api_base_url: Optional API base URL (e.g., "https://api.openai.com/v1").
+                         If None, uses LiteLLM default based on model provider.
         """
         self.model = model
+        self.api_base_url = api_base_url
         # Track conversation history per context for multi-turn interactions
         self.ctx_id_to_messages = {}
 
@@ -156,41 +199,37 @@ class PetscAgentExecutor(AgentExecutor):
             cli_args: str # e.g. "-ts_type beuler -ts_monitor"
 
         try:
-            if USE_ASKSAGE:
-                # ANL AskSage requires ASKSAGE_API_KEY and SSL_CERT_FILE to be set in the environment.
-                # The litellm completion API cannot control ssl_verify effectively. So we have to rely on litellm.ssl_verify.
-                # But other LLMs may not work if litellm.ssl_verify is not reset properly.
-                litellm.ssl_verify = os.environ["SSL_CERT_FILE"]
-                # Generate PETSc code using the LLM with JSON schema
-                response = completion(
-                    api_key=os.environ["ASKSAGE_API_KEY"],
-                    api_base="https://api.asksage.anl.gov/server/v1",
-                    messages=messages,
-                    model=self.model,
-                    temperature=0.0,
-                    response_format=ProblemResponse
-                )
-            else:
-                litellm.ssl_verify = False
-                # Generate PETSc code using the LLM with JSON schema
-                response = completion(
-                    messages=messages,
-                    model=self.model,
-                    temperature=0.0,
-                    response_format=ProblemResponse
-                )
+            # Generate PETSc code using the LLM with JSON schema
+            completion_kwargs = {
+                'messages': messages,
+                'model': self.model,
+                'temperature': 0.0,
+                'response_format': ProblemResponse
+            }
+            litellm.ssl_verify = False
+            if self.api_base_url:
+                completion_kwargs['api_base'] = self.api_base_url
+                is_asksage_endpoint = self.api_base_url.startswith('https://api.asksage.anl.gov')
+                if is_asksage_endpoint:
+                    litellm.ssl_verify = os.environ["ASKSAGE_SSL_CERT_FILE"]
+                    completion_kwargs['api_key'] = os.environ["ASKSAGE_API_KEY"]
+            response = completion(**completion_kwargs)
             # Extract the generated content from LLM response
-            content = response.choices[0].message.model_dump()["content"]
-            # Remove markdown code block wrapper that some LLMs such as Claude add
-            # This ensures we get clean JSON for parsing
-            content = content.replace('```json\n','').replace('```','')
+            content = response.choices[0].message.content
             if isinstance(content, str):
-                content = json.loads(content)
+                # Remove markdown code block wrapper that some LLMs such as Claude add
+                # This ensures we get clean JSON for parsing
+                if content.startswith("```"):
+                    content = content.split("```", 2)[1]
+                    content = content.lstrip("json").strip()
+                data = json.loads(content)
+            else:
+                raise TypeError(f"Expected string content from response, got {type(content)}")
             # Parse the JSON response
-            nsize = content["nsize"]
-            cli_args = content["cli_args"]
+            nsize = data["nsize"]
+            cli_args = data["cli_args"]
             parts_list = [TextPart(text=f"Code generation successful ✅\nnsize: {nsize}\ncli_args: {cli_args}\n")]
-            for entry in content["codes"]:
+            for entry in data["codes"]:
                 # Create file object with code content
                 fwb = FileWithBytes(
                     name=entry["filename"],
@@ -204,7 +243,7 @@ class PetscAgentExecutor(AgentExecutor):
             )
         except Exception as e:
             # Handle any errors during code generation
-            print(f"Task failed with agent error: {e}")
+            print(f"@@@ Purple agent: ❌ Task failed with agent error: {e}")
             # Return error message to the client
             parts_list = [TextPart(text=f"Code generation failed ❌\nerror: {e}\n")]
             await event_queue.enqueue_event(
@@ -226,7 +265,7 @@ class PetscAgentExecutor(AgentExecutor):
         """
         raise NotImplementedError
 
-def start_purple_agent(host: str="localhost", port: int=9002, card_url: str=None, agent_llm: str="gemini/gemini-3-flash-preview"):
+def start_purple_agent(host: str="localhost", port: int=9002, card_url: str=None, agent_llm: str="gemini/gemini-3-flash-preview", api_base_url: str = None):
     """
     Start the Purple Agent A2A HTTP service.
 
@@ -240,6 +279,7 @@ def start_purple_agent(host: str="localhost", port: int=9002, card_url: str=None
         card_url: Optional explicit URL used to build/advertise the agent card.
             If not provided, a URL is constructed from `host` and `port`.
         agent_llm: LLM identifier/config string passed to `PetscAgentExecutor`.
+        api_base_url: Optional API base URL for LLM API calls.
 
     Notes:
         Although declared `async`, this function starts a blocking Uvicorn server
@@ -250,7 +290,7 @@ def start_purple_agent(host: str="localhost", port: int=9002, card_url: str=None
     card = prepare_purple_agent_card(card_url or f"http://{host}:{port}")
 
     request_handler = DefaultRequestHandler(
-        agent_executor=PetscAgentExecutor(agent_llm),
+        agent_executor=PetscAgentExecutor(agent_llm, api_base_url=api_base_url),
         task_store=InMemoryTaskStore(),
     )
     app = A2AStarletteApplication(

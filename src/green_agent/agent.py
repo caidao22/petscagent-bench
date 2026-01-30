@@ -74,7 +74,7 @@ def read_from_json(path):
     return data
 
 
-def load_evaluation_config(config_path: str = "config/evaluation_config.yaml") -> Dict[str, Any]:
+def load_green_agent_config(config_path: str = "config/green_agent_config.yaml") -> Dict[str, Any]:
     """Load evaluation configuration from file or use defaults.
 
     Supports both JSON and YAML formats. Format is auto-detected by file extension.
@@ -112,13 +112,12 @@ def load_evaluation_config(config_path: str = "config/evaluation_config.yaml") -
             'enable_metrics': True,
             'enable_quality': True,
             'llm': {
+                'model': 'gemini/gemini-3-flash-preview',
+                'api_base_url': None,
                 'temperature': 0.3,
                 'max_concurrent_calls': 3,
             },
             'parallel_evaluation': True,
-            'thresholds': {
-                'min_llm_confidence': 0.7,
-            },
         },
         'scoring': {
             'weights': {
@@ -187,10 +186,11 @@ class Agent:
 
     The agent distributes test tasks to participant agents, collects their responses, and reports the results.
     """
-    def __init__(self, purple_agent_url, mcp_server_url, model, max_num_prob=None, use_cache=False, green_id=None, purple_id=None):
+    def __init__(self, purple_agent_url, mcp_server_url, model, api_base_url, max_num_prob=None, use_cache=False, green_id=None, purple_id=None):
         self.purple_agent_url = purple_agent_url
         self.mcp_client = PetscCompileRunMCPClient(mcp_server_url)
         self.model = model
+        self.api_base_url = api_base_url
         self.max_num_prob = max_num_prob
         self.metrics = {}
         self.use_cache = use_cache
@@ -201,9 +201,9 @@ class Agent:
         self.cache_dir.mkdir(exist_ok=True)
 
         # Initialize evaluation system with config from file or defaults
-        eval_config = load_evaluation_config()
+        eval_config = load_green_agent_config()
         self.eval_config = eval_config
-        self.evaluation_pipeline = EvaluationPipeline(eval_config, self.model)
+        self.evaluation_pipeline = EvaluationPipeline(eval_config, self.model, self.api_base_url)
         self.metrics_aggregator = MetricsAggregator(eval_config)
         print(f"@@@ Green agent: ✅ Evaluation system initialized with {self.evaluation_pipeline.get_evaluator_count()['total']} evaluators")
 

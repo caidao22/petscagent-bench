@@ -1,0 +1,16 @@
+# LLM settings for quality evaluators
+# To use Argo
+#   must connect to ANL network directly or via VPN
+#   model: openai/<model_name>
+#   api_base_url: "https://apps-dev.inside.anl.gov/argoapi/v1"
+#   query available models: curl "https://apps-dev.inside.anl.gov/argoapi/api/v1/models/" | jq -r '.data[].internal_id'
+#
+# To use AskSage
+#   ASKSAGE_API_KEY and ASKSAGE_SSL_CERT_FILE must be set in the environment
+#   model: openai/<model_name>
+#   api_base_url: "https://api.asksage.anl.gov/server/v1"
+#   query available models: curl --cacert <path_to_ssl_pem_file> https://api.asksage.anl.gov/server/v1/models | jq -r '.data[].id'
+llm:
+  model: "openai/claudeopus45"
+  api_base_url: "https://apps-dev.inside.anl.gov/argoapi/v1"
+  temperature: 0 # Set to 0 only for reproducibility

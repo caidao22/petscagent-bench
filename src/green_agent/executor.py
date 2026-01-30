@@ -24,9 +24,10 @@ TERMINAL_STATES = {
 
 
 class GreenAgentExecutor(AgentExecutor):
-    def __init__(self, model: str):
+    def __init__(self, model: str, api_base_url: str = None):
         self.agents: dict[str, Agent] = {}  # context_id to agent instance
         self.model = model
+        self.api_base_url = api_base_url
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         # parse the context to get purple agent URL and other configurations
@@ -41,7 +42,7 @@ class GreenAgentExecutor(AgentExecutor):
         task = new_task(context.message)
         await event_queue.enqueue_event(task)
         context_id = task.context_id
-        agent = Agent(purple_agent_url=purple_agent_url, mcp_server_url=mcp_server_url, model=self.model, green_id=green_id, purple_id=purple_id)
+        agent = Agent(purple_agent_url=purple_agent_url, mcp_server_url=mcp_server_url, model=self.model, api_base_url=self.api_base_url, green_id=green_id, purple_id=purple_id)
         # for debugging
         # max_num_prob = 1
         # agent = Agent(purple_agent_url=purple_agent_url, mcp_server_url=mcp_server_url, max_num_prob=max_num_prob)

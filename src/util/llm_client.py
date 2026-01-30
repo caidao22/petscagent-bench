@@ -14,15 +14,18 @@ dotenv.load_dotenv()
 class LLMClient:
     """Client for making LLM API calls."""
 
-    def __init__(self, model: str = "gpt-4o-mini", temperature: float = 0.3):
+    def __init__(self, model: str = "gpt-4o-mini", temperature: float = 0.3, api_base_url: Optional[str] = None):
         """Initialize LLM client.
 
         Args:
             model: Model name (supports OpenAI, Anthropic, etc. via LiteLLM)
             temperature: Sampling temperature (0-1)
+            api_base_url: Optional API base URL (e.g., "https://api.openai.com/v1").
+                         If None, uses LiteLLM default based on model provider.
         """
         self.model = model
         self.temperature = temperature
+        self.api_base_url = api_base_url
 
     async def structured_completion(
         self,
@@ -48,32 +51,32 @@ class LLMClient:
         messages.append({"role": "user", "content": prompt})
 
         try:
-            if USE_ASKSAGE:
-                # ANL AskSage requires ASKSAGE_API_KEY and SSL_CERT_FILE to be set in the environment.
-                # The litellm completion API cannot control ssl_verify effectively. So we have to rely on litellm.ssl_verify.
-                # But other LLMs may not work if litellm.ssl_verify is not reset properly.
-                litellm.ssl_verify = os.environ["SSL_CERT_FILE"]
-                response = await acompletion(
-                        api_key=os.environ["ASKSAGE_API_KEY"],
-                        api_base="https://api.asksage.anl.gov/server/v1",
-                        model=self.model,
-                        messages=messages,
-                        temperature=self.temperature,
-                        response_format={"type": "json_object"},
-                    )
-            else:
-                litellm.ssl_verify = False
-                # Use JSON mode
-                response = await acompletion(
-                    model=self.model,
-                    messages=messages,
-                    temperature=self.temperature,
-                    response_format={"type": "json_object"},
-                )
+            # Use JSON mode
+            completion_kwargs = {
+                'model': self.model,
+                'messages': messages,
+                'temperature': self.temperature,
+                'response_format': {"type": "json_object"},
+            }
+            litellm.ssl_verify = False
+            if self.api_base_url:
+                completion_kwargs['api_base'] = self.api_base_url
+                is_asksage_endpoint = self.api_base_url.startswith('https://api.asksage.anl.gov')
+                if is_asksage_endpoint:
+                    litellm.ssl_verify = os.environ["ASKSAGE_SSL_CERT_FILE"]
+                    completion_kwargs['api_key'] = os.environ["ASKSAGE_API_KEY"]
+            response = await acompletion(**completion_kwargs)
             # Parse JSON response
             content = response.choices[0].message.content
-            data = json.loads(content)
-
+            if isinstance(content, str):
+                # Remove markdown code block wrapper that some LLMs such as Claude add
+                # This ensures we get clean JSON for parsing
+                if content.startswith("```"):
+                    content = content.split("```", 2)[1]
+                    content = content.lstrip("json").strip()
+                data = json.loads(content)
+            else:
+                raise TypeError(f"Expected string content from response, got {type(content)}")
             # Handle case where LLM returns array instead of object
             if isinstance(data, list) and data:
                 # Use first element if it's an array of objects

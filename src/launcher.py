@@ -15,8 +15,9 @@ import asyncio
 import json
 import mcp
 from src.green_agent.server import start_green_agent
-from src.purple_agent.petsc_agent import start_purple_agent
+from src.purple_agent.petsc_agent import start_purple_agent, load_purple_agent_config
 from src.util.a2a_comm import wait_agent_ready, send_message
+from src.green_agent.agent import load_green_agent_config
 import os
 import dotenv
 
@@ -26,17 +27,17 @@ dotenv.load_dotenv()
 from petsc_compile_run_mcp_server import main as start_mcp_server
 
 
-def run_green_agent():
+def run_green_agent(agent_llm, api_base_url=None):
     """Execute the Green Agent in a separate process.
     
     This wrapper function is needed for multiprocessing.Process,
     which requires a synchronous entry point. The function creates
     a new asyncio event loop and runs the async green agent server.
     """
-    asyncio.run(start_green_agent(agent_llm="gemini/gemini-3-flash-preview"))
+    asyncio.run(start_green_agent(agent_llm=agent_llm, api_base_url=api_base_url))
 
 
-def run_purple_agent():
+def run_purple_agent(agent_llm, api_base_url=None):
     """Execute the Purple Agent in a separate process.
     
     Starts the Purple Agent with a specific LLM configuration.
@@ -45,7 +46,7 @@ def run_purple_agent():
     Currently configured to use: openai/gpt-5.2
     Other options: gemini/gemini-2.5-flash, openai/gpt-4o, etc.
     """
-    asyncio.run(start_purple_agent(agent_llm="gemini/gemini-3-flash-preview"))
+    asyncio.run(start_purple_agent(agent_llm=agent_llm, api_base_url=api_base_url))
     # asyncio.run(start_purple_agent(agent_llm="openai/google-claude-45-opus")) # test AskSage
 
 
@@ -85,16 +86,26 @@ async def launch_evaluation():
     mcp_server_url = "http://localhost:8080/mcp"  # MCP tools server
     green_id = "019bb856-c8bf-7390-8c4f-bced52276932" # AgentBeats ID
     purple_id = ""
+
+    green_cfg = load_green_agent_config()
+    green_llm_cfg = green_cfg.get('evaluation', {}).get('llm', {})
+    green_model = green_llm_cfg.get('model', 'openai/gpt-4o-mini')
+    green_api_base_url = green_llm_cfg.get('api_base_url')
+
+    purple_cfg = load_purple_agent_config()
+    purple_llm_cfg = purple_cfg.get('llm')
+    purple_model = purple_llm_cfg.get('model', 'openai/gpt-4o-mini')
+    purple_api_base_url = purple_llm_cfg.get('api_base_url')
     # Step 1: Start Green Agent (assessment manager)
     print("Launching green agent...")
-    p_green = multiprocessing.Process(target=run_green_agent)
+    p_green = multiprocessing.Process(target=run_green_agent, args=(green_model, green_api_base_url))
     p_green.start()
     assert await wait_agent_ready(green_url), "Green agent not ready in time"
     print("Green agent is ready.")
 
     # Step 2: Start Purple Agent (code generator being tested)
     print("Launching purple agent...")
-    p_purple = multiprocessing.Process(target=run_purple_agent)
+    p_purple = multiprocessing.Process(target=run_purple_agent, args=(purple_model, purple_api_base_url))
     p_purple.start()
     assert await wait_agent_ready(purple_url), "purple agent not ready in time"
     print("purple agent is ready.")

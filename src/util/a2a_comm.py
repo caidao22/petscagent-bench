@@ -45,12 +45,13 @@ async def get_agent_card(url: str) -> AgentCard | None:
         AgentCard object if successful, None if the agent is unreachable
         or doesn't provide a valid card
     """
-    httpx_client = httpx.AsyncClient()
-    resolver = A2ACardResolver(httpx_client=httpx_client, base_url=url)
-
-    card: AgentCard | None = await resolver.get_agent_card()
-
-    return card
+    httpx_client = httpx.AsyncClient(timeout=30.0)
+    try:
+        resolver = A2ACardResolver(httpx_client=httpx_client, base_url=url)
+        card: AgentCard | None = await resolver.get_agent_card()
+        return card
+    finally:
+        await httpx_client.aclose()
 
 
 async def wait_agent_ready(url, timeout=10):
@@ -112,29 +113,31 @@ async def send_message(
 
     # Create HTTP client with extended timeout for long-running operations
     httpx_client = httpx.AsyncClient(timeout=300.0)
-    client = A2AClient(httpx_client=httpx_client, agent_card=card)
+    try:
+        client = A2AClient(httpx_client=httpx_client, agent_card=card)
 
-    # Generate unique message ID for tracking
-    message_id = uuid.uuid4().hex
+        # Generate unique message ID for tracking
+        message_id = uuid.uuid4().hex
 
-    # Construct message parameters with user role
-    params = MessageSendParams(
-        message=Message(
-            role=Role.user,
-            parts=[Part(TextPart(text=message))],
-            message_id=message_id,
-            task_id=task_id,
-            context_id=context_id,
+        # Construct message parameters with user role
+        params = MessageSendParams(
+            message=Message(
+                role=Role.user,
+                parts=[Part(TextPart(text=message))],
+                message_id=message_id,
+                task_id=task_id,
+                context_id=context_id,
+            )
         )
-    )
-    # Create request with unique ID
-    request_id = uuid.uuid4().hex
-    req = SendMessageRequest(id=request_id, params=params)
+        # Create request with unique ID
+        request_id = uuid.uuid4().hex
+        req = SendMessageRequest(id=request_id, params=params)
 
-    # Send message and await response
-    response = await client.send_message(request=req)
-    return response
-
+        # Send message and await response
+        response = await client.send_message(request=req)
+        return response
+    finally:
+        await httpx_client.aclose()
 
 def parse_tags(str_with_tags: str) -> Dict[str, str]:
     """Parse XML-style tags from a string and return their contents.

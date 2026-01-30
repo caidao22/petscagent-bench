@@ -14,7 +14,7 @@ def load_agent_card_toml(agent_name):
     with open(f"{current_dir}/{agent_name}.toml", "rb") as f:
         return tomllib.load(f)
 
-def start_green_agent(host: str="localhost", port: int=9001, card_url: str=None, agent_llm: str="gemini/gemini-3-flash-preview"):
+def start_green_agent(host: str="localhost", port: int=9001, card_url: str=None, agent_llm: str="gemini/gemini-3-flash-preview", api_base_url: str = None):
     """Start the Green Agent A2A HTTP server.
 
     Loads the agent card configuration from ``green_agent.toml``, ensures the
@@ -29,6 +29,8 @@ def start_green_agent(host: str="localhost", port: int=9001, card_url: str=None,
         port: Port to bind the server to.
         card_url: External URL to advertise in the agent card. If empty,
             ``http://{host}:{port}`` is used.
+        agent_llm: LLM identifier/config string passed to `PetscAgentExecutor`.
+        api_base_url: Optional API base URL for LLM API calls.
 
     Returns:
         None
@@ -37,7 +39,7 @@ def start_green_agent(host: str="localhost", port: int=9001, card_url: str=None,
     agent_card_dict = load_agent_card_toml("green_agent")
     agent_card_dict["url"] = card_url or f"http://{host}:{port}" # complete all required card fields
     request_handler = DefaultRequestHandler(
-        agent_executor=GreenAgentExecutor(agent_llm),
+        agent_executor=GreenAgentExecutor(agent_llm, api_base_url=api_base_url),
         task_store=InMemoryTaskStore(),
     )
     server = A2AStarletteApplication(

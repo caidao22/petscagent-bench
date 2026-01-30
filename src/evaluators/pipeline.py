@@ -90,6 +90,7 @@ class EvaluationPipeline:
         - evaluation.enable_quality: Enable/disable quality phase
         - evaluation.parallel_evaluation: Run evaluators in parallel
         - evaluation.llm.model: LLM model for quality evaluations
+        - evaluation.llm.api_base_url: LLM API base URL
         - evaluation.llm.max_concurrent_calls: Rate limit for LLM calls
     
     Attributes:
@@ -99,19 +100,21 @@ class EvaluationPipeline:
         quality: List of quality evaluators
     """
     
-    def __init__(self, config: Optional[Dict[str, Any]] = None, model: str = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None, model: str = None, api_base_url: str = None):
         """Initialize evaluation pipeline.
         
         Args:
             config: Configuration dictionary loaded from YAML/JSON.
                    If None, uses default configuration.
             model: Agent LLM model
+            api_base_url: Optinal API base URL
         """
         self.config = config or {}
         self.gates: List[Evaluator] = []
         self.metrics: List[Evaluator] = []
         self.quality: List[Evaluator] = []
         self.model = model
+        self.api_base_url = api_base_url
         self._setup_evaluators()
     
     def _get_eval_config(self, key: str, default: Any = None) -> Any:
@@ -172,8 +175,8 @@ class EvaluationPipeline:
         if self._get_eval_config('enable_quality', True):
             llm_config = {
                 'llm_model': self.model,
+                'llm_api_base_url': self.api_base_url,
                 'llm_temperature': self._get_llm_config('temperature', 0.3),
-                'llm_api_base_url': self._get_llm_config('api_base_url'),
                 'max_concurrent_calls': self._get_llm_config('max_concurrent_calls', 3),
             }
             

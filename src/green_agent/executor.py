@@ -24,7 +24,7 @@ TERMINAL_STATES = {
 
 
 class GreenAgentExecutor(AgentExecutor):
-    def __init__(self, model: str, api_base_url: str = None):
+    def __init__(self, model: str, api_base_url: str | None = None):
         self.agents: dict[str, Agent] = {}  # context_id to agent instance
         self.model = model
         self.api_base_url = api_base_url

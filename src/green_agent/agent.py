@@ -473,7 +473,7 @@ class Agent:
         output_dir.mkdir(exist_ok=True)
         local_path = output_dir / "benchmark_summary.json"
         json_data = {
-            "agent": self.green_id,
+            "agent": self.purple_id,
             "summary": summary,
             "results": [asdict(r) for r in results],
         }

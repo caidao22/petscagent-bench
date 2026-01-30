@@ -14,7 +14,7 @@ def load_agent_card_toml(agent_name):
     with open(f"{current_dir}/{agent_name}.toml", "rb") as f:
         return tomllib.load(f)
 
-def start_green_agent(host: str="localhost", port: int=9001, card_url: str=None, agent_llm: str="gemini/gemini-3-flash-preview", api_base_url: str = None):
+def start_green_agent(host: str = "localhost", port: int = 9001, card_url: str | None = None, agent_llm: str = "gemini/gemini-3-flash-preview", api_base_url: str | None = None):
     """Start the Green Agent A2A HTTP server.
 
     Loads the agent card configuration from ``green_agent.toml``, ensures the
@@ -54,6 +54,7 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=9001, help="Port to bind the server")
     parser.add_argument("--card-url", type=str, help="External URL for the agent card")
     parser.add_argument("--agent-llm", type=str, default="gemini/gemini-3-flash-preview", help="LLM model to use")
+    parser.add_argument("--api-base-url", type=str, help="Optional LLM API base URL (overrides config)")
     args = parser.parse_args()
 
-    start_green_agent(args.host, args.port, args.card_url, args.agent_llm)
+    start_green_agent(args.host, args.port, args.card_url, args.agent_llm, api_base_url=args.api_base_url)

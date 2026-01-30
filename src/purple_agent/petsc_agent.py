@@ -136,7 +136,7 @@ class PetscAgentExecutor(AgentExecutor):
         ctx_id_to_messages: Dict mapping context IDs to conversation histories
     """
 
-    def __init__(self, model: str, api_base_url: str = None):
+    def __init__(self, model: str, api_base_url: str | None = None):
         """Initialize the executor with a specific LLM model.
 
         Args:
@@ -265,7 +265,7 @@ class PetscAgentExecutor(AgentExecutor):
         """
         raise NotImplementedError
 
-def start_purple_agent(host: str="localhost", port: int=9002, card_url: str=None, agent_llm: str="gemini/gemini-3-flash-preview", api_base_url: str = None):
+def start_purple_agent(host: str = "localhost", port: int=9002, card_url: str | None = None, agent_llm: str = "gemini/gemini-3-flash-preview", api_base_url: str | None = None):
     """
     Start the Purple Agent A2A HTTP service.
 
@@ -305,6 +305,7 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=9002, help="Port to bind the server")
     parser.add_argument("--card-url", type=str, help="External URL for the agent card")
     parser.add_argument("--agent-llm", type=str, default="gemini/gemini-3-flash-preview", help="LLM model to use, such as gemini/gemini-3-flash-preview, gemini/gemini-2.5-flash, gpt-5.2")
+    parser.add_argument("--api-base-url", type=str, help="Optional LLM API base URL (overrides config)")
     args = parser.parse_args()
 
-    start_purple_agent(args.host, args.port, args.card_url, args.agent_llm)
+    start_purple_agent(args.host, args.port, args.card_url, args.agent_llm, api_base_url=args.api_base_url)

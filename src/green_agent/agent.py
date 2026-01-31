@@ -100,7 +100,7 @@ def load_green_agent_config(config_path: str = "config/green_agent_config.yaml")
             print(f"@@@ Green agent: ✅ Loaded evaluation config from {config_path}")
             return config_data
         except Exception as e:
-            print(f"@@@ Green agent: ⚠️ Failed to load config from {config_path}: {e}")
+            print(f"@@@ Green agent: Failed to load config from {config_path}: {e}")
             print(f"@@@ Green agent: Using default evaluation configuration")
     else:
         print(f"@@@ Green agent: Config file {config_path} not found, using defaults")
@@ -232,7 +232,7 @@ class Agent:
                 print(f"@@@ Green agent: ✅ Loaded cached response for {problem_name}")
                 return cached_data
             except Exception as e:
-                print(f"@@@ Green agent: ⚠️ Failed to load cache for {problem_name}: {e}")
+                print(f"@@@ Green agent: ❌ Failed to load cache for {problem_name}: {e}")
                 return None
         return None
 
@@ -244,7 +244,7 @@ class Agent:
                 pickle.dump(response, f)
             print(f"@@@ Green agent: 💾 Cached response for {problem_name}")
         except Exception as e:
-            print(f"@@@ Green agent: ⚠️ Failed to save cache for {problem_name}: {e}")
+            print(f"@@@ Green agent: ❌ Failed to save cache for {problem_name}: {e}")
 
     async def _create_files_on_server(self, pname: str, file_list: List[Any], generated_codes: List[bytes]) -> str:
         """Upload generated files to MCP server.

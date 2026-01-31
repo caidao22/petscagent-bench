@@ -31,7 +31,7 @@ class GreenAgentExecutor(AgentExecutor):
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         # parse the context to get purple agent URL and other configurations
-        print("Green agent: Received a task, parsing...")
+        print("@@@ Green agent: Received a task, parsing...")
         user_input = context.get_user_input()
         tags = parse_tags(user_input)
         purple_agent_url = tags["purple_agent_url"]
@@ -50,10 +50,10 @@ class GreenAgentExecutor(AgentExecutor):
         agent = self.agents.get(context_id)
         updater = TaskUpdater(event_queue, task.id, context_id)
 
-        print("Green agent: Start working...")
+        print("@@@ Green agent: Start working...")
         await updater.start_work()
         try:
-            print("Green agent: Starting code generation request...")
+            print("@@@ Green agent: Starting code generation request...")
 
             res = await agent.run(context.message, updater)
             if not updater._terminal_state_reached:
@@ -66,7 +66,7 @@ class GreenAgentExecutor(AgentExecutor):
                 )
             )
 
-        print("Green agent: Code generation request complete.")
+        print("@@@ Green agent: ✅ Code generation request complete.")
         await event_queue.enqueue_event(new_agent_text_message(f"Finished. ✅\n"))
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:

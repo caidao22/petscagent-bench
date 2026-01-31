@@ -6,7 +6,7 @@ petscagent-bench is a benchmark and harness for evaluating AI agents that genera
 
 ## The Challenge
 
-Imagine you're a scientist trying to simulate how a black hole warps spacetime, or an engineer modeling how heat flows through a nuclear reactor. These problems require solving massive systems of equations—millions or billions of unknowns—running on the world's most powerful supercomputers.
+Imagine you're a scientist trying to simulate how air circulates in the atmosphere, or an engineer modeling how heat flows through a nuclear reactor. These problems require solving massive systems of equations—millions or billions of unknowns—running on the world's most powerful supercomputers.
 
 For 30+ years, **PETSc** (Portable, Extensible Toolkit for Scientific Computation) has been the gold standard library for this. It powers simulations at national labs, universities, and research centers worldwide. But there's a catch: **PETSc is notoriously difficult to learn**.
 

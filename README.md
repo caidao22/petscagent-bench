@@ -232,7 +232,7 @@ llm:
 
 ## Evaluation System
 
-For full details on the evaluation design, scoring, and components, see `EVALUATION_SYSTEM_SUMMARY.md`.
+For full details on the evaluation design, scoring, and components, see [EVALUATION_SYSTEM_SUMMARY.md](EVALUATION_SYSTEM_SUMMARY.md).
 
 At a high level, evaluation is organized into:
 

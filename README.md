@@ -4,12 +4,22 @@ An agentified evaluation framework for testing PETSc code generation agents usin
 
 ## Overview
 
-This project implements a multi-agent system for evaluating code generation agents that produce PETSc (Portable, Extensible Toolkit for Scientific Computation) programs. The system uses:
+This repository implements a multi-agent benchmark for evaluating code generation agents that produce PETSc (Portable, Extensible Toolkit for Scientific Computation) programs.
 
-- **A2A Protocol**: Standardized agent-to-agent communication
-- **MCP Protocol**: Tool access for compilation and execution
-- **Multi-tier Evaluation**: Gates, metrics, and quality assessments
-- **Automated Benchmarking**: End-to-end evaluation workflow
+Core building blocks:
+
+- **A2A Protocol**: standardized agent-to-agent communication over HTTP.
+- **MCP Protocol**: tool access for compilation and execution.
+- **Evaluation pipeline**: gates + metrics + LLM-based quality evaluators, aggregated into a composite score and tier.
+
+High-level flow:
+
+1. The **Green Agent** loads benchmark problems from `data/*.json`.
+2. For each problem, it asks the **Purple Agent** to generate PETSc code.
+3. It compiles and runs the returned code via MCP tools.
+4. It evaluates results and writes reports to `output/`.
+
+> Note: Running the benchmark can consume significant LLM tokens depending on the model and number of problems.
 
 ### Why PETSc?
 
@@ -67,68 +77,53 @@ By benchmarking on PETSc, we evaluate whether LLMs can truly assist in **mission
 
 ## Architecture
 
-The system consists of three main components:
+The system consists of three components:
 
-1. **Green Agent** (Assessment Manager)
-   - Loads benchmark problems from the dataset
-   - Distributes tasks to the Purple Agent
-   - Evaluates generated code through a comprehensive pipeline
-   - Generates detailed assessment reports
+1. **Green Agent** (assessment manager)
+   - Loads benchmark problems from `data/*.json`
+   - Sends each problem description to the Purple Agent via A2A
+   - Compiles and runs returned code via MCP tools
+   - Scores results (gates + metrics + quality) and aggregates into a composite score + tier
+   - Writes reports to `output/`
 
-2. **Purple Agent** (Target Under Test)
-   - Receives problem descriptions via A2A
-   - Generates PETSc C/C++ code using an LLM
-   - Returns code and CLI arguments
-   - Isolated from evaluation logic
+2. **Purple Agent** (target under test)
+   - Receives a problem description via A2A
+   - Uses an LLM to generate PETSc code
+   - Returns:
+     - a status text that includes `cli_args`
+     - one or more code files
 
-3. **MCP Server** (Tool Provider)
-   - Provides compilation tools (make)
-   - Provides execution tools (run with arguments)
-   - Manages PETSc environment configuration
+3. **MCP Server** (tool provider)
+   - Provides compilation and execution tools for PETSc code (used by the Green Agent)
 
 ## Project Structure
 
 ```
-├── data/                           # Benchmark problem datasets
-│   └── problems_test.jsonl         # Test problem specifications
-├── main.py                         # CLI entry point
-├── pyproject.toml                  # Python project configuration
-├── README.md                       # This file
-├── src/
-│   ├── green_agent/                # Assessment manager agent
-│   │   ├── agent.py               # Core evaluation logic
-│   │   ├── server.py              # A2A server implementation
-│   │   └── mcp_client.py          # MCP client for tools
-│   ├── purple_agent/               # Target agent being tested
-│   │   └── petsc_agent.py         # Code generation agent
-│   ├── evaluators/                 # Evaluation system
-│   │   ├── base.py                # Base evaluator classes
-│   │   ├── pipeline.py            # Evaluation orchestrator
-│   │   ├── gates/                 # Binary pass/fail checks
-│   │   ├── metrics/               # Quantitative measurements
-│   │   └── quality/               # Quality assessments
-│   ├── metrics/                    # Metrics aggregation
-│   │   ├── aggregation.py         # Score computation
-│   │   └── types.py               # Metric data types
-│   ├── util/                       # Utility modules
-│   │   ├── a2a_comm.py            # A2A communication helpers
-│   │   └── llm_client.py          # LLM client utilities
-│   └── launcher.py                # Evaluation coordinator
+├── data/                           # Benchmark problems (JSON files)
 ├── config/                         # Configuration files
-│   ├── green_agent_config.yaml    # Green agent LLM and evaluation settings
-│   └── purple_agent_config.yaml   # Purple agent LLM settings
+│   ├── green_agent_config.yaml     # Green agent evaluation + scoring + LLM settings
+│   └── purple_agent_config.yaml    # Purple agent LLM settings
+├── src/
+│   ├── client_cli.py               # Sends “start benchmark” task to the Green Agent
+│   ├── launcher.py                 # Spawns Green/Purple/MCP locally (end-to-end)
+│   ├── green_agent/                # Assessment manager agent
+│   ├── purple_agent/               # Target agent under test
+│   ├── evaluators/                 # Gates / metrics / quality evaluators
+│   ├── metrics/                    # Score aggregation + tiering
+│   └── util/                       # A2A helpers + LLM client
+├── main.py                         # CLI entry point (green/purple/launch)
+├── pyproject.toml                  # Python project configuration
 ├── output/                         # Generated reports and results
-├── generated_codes/                # Code generated by Purple Agent
-└── purple_agent_cache/             # Cached responses (optional)
+└── purple_agent_cache/             # Cached purple-agent responses (optional)
 ```
 
 ## Installation
 
 ### Prerequisites
 
-1. **PETSc Installation**: Install PETSc from [https://petsc.org/](https://petsc.org/) for local testing only
-2. **Python 3.11+**: Required for the evaluation framework
-3. **UV Package Manager**: Install from [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv)
+1. **PETSc Installation**: Install PETSc from [https://petsc.org/](https://petsc.org/) for local compilation/execution.
+2. **Python 3.12+**: Required (see `pyproject.toml`).
+3. **uv**: Python package manager used by this repo: https://github.com/astral-sh/uv
 
 ### Setup
 
@@ -167,9 +162,9 @@ This command will:
 4. Run all benchmark problems
 5. Generate evaluation reports in `output/`
 
-### Depolying Individual Components
+### Deploying Individual Components
 
-You can also run components separately for production deployment:
+You can run the components separately (useful when deploying services on different machines or restarting a single component during development).
 
 ```bash
 # Start only the Green Agent
@@ -178,9 +173,11 @@ uv run src/green_agent/server.py
 # Start only the Purple Agent
 uv run src/purple_agent/petsc_agent.py
 ```
-For MCP server deployment, refer to [https://gitlab.com/petsc/petsc_mcp_servers](https://gitlab.com/petsc/petsc_mcp_servers)
 
-To launch the complete evaluation workflow, collect the URLs for agents and the MCP server, and run:
+For MCP server deployment, refer to https://gitlab.com/petsc/petsc_mcp_servers
+
+Once the Green Agent, Purple Agent, and MCP server are running, trigger a benchmark run by sending the task message to the Green Agent:
+
 ```bash
 uv run src/client_cli.py --green-url <GREEN_URL> --purple-url <PURPLE_URL> --mcp-server-url <MCP_URL>
 ```
@@ -203,10 +200,10 @@ evaluation:
   parallel_evaluation: true   # Run evaluators in parallel
   
   llm:
-    model: "gemini/gemini-2.5-flash"  # LLM for quality evaluation
-    api_base_url: null                 # Optional API base URL (e.g., for AskSage)
-    temperature: 0.3                   # LLM temperature
-    max_concurrent_calls: 3            # Rate limiting for LLM calls
+    model: "openai/gpt52"            # LLM for quality evaluation
+    api_base_url: "https://apps-dev.inside.anl.gov/argoapi/v1"  # Optional API base URL (e.g., Argo/AskSage)
+    temperature: 0                    # Set to 0 only for reproducibility
+    max_concurrent_calls: 3           # Rate limiting for LLM calls
 
 scoring:
   weights:
@@ -227,200 +224,72 @@ Example `config/purple_agent_config.yaml`:
 
 ```yaml
 llm:
-  model: "openai/gpt-4o"           # LLM for code generation
-  api_base_url: null                # Optional API base URL (e.g., for AskSage)
-  temperature: 0.0                  # Lower temperature for more deterministic code
+  model: "openai/claudeopus45"     # LLM for code generation
+  api_base_url: "https://apps-dev.inside.anl.gov/argoapi/v1"  # Optional API base URL (e.g., Argo/AskSage)
+  temperature: 0                    # Set to 0 only for reproducibility
 ```
 
 **Note**:
-- Use a LiteLLM-style name, e.g. `<prodiver_name>/<model_name>`. For models provided with an OpenAI-compatible endpoint. Always use `openai` as the provider name.
+- Use a LiteLLM-style name, e.g. `<provider_name>/<model_name>`. For models provided with an OpenAI-compatible endpoint, use `openai` as the provider name.
 - Leave `api_base_url` `null` to use each provider’s default (e.g. `https://api.openai.com/v1`). Set this to use a custom or proxy endpoint (e.g. `https://apps-dev.inside.anl.gov/argoapi/v1` for Argo). For OpenAI-compatible APIs the URL should end with `/v1`; the client will use the appropriate LiteLLM provider prefix.
 - The system auto-detects AskSage endpoints when `api_base_url` starts with `https://api.asksage.anl.gov` and configures SSL and API keys accordingly.
 
 ## Evaluation System
 
-The evaluation pipeline consists of three phases:
+For full details on the evaluation design, scoring, and components, see `EVALUATION_SYSTEM_SUMMARY.md`.
 
-### Phase 1: Gates (Must Pass)
+At a high level, evaluation is organized into:
 
-Binary checks that code must pass to be considered valid:
-
-- **Compilation Gate**: Code must compile without errors
-- **Execution Gate**: Code must run without crashes
-- **Memory Safety Gate**: No memory leaks or invalid accesses
-- **API Usage Gate**: Correct PETSc API usage
-
-If any gate fails, evaluation stops and the code receives a FAIL tier.
-
-### Phase 2: Metrics (Measurements)
-
-Quantitative measurements of code performance:
-
-- **Numerical Accuracy**: Correctness of numerical results
-- **Execution Time**: Runtime performance
-
-### Phase 3: Quality (Assessments)
-
-Qualitative assessments of code quality:
-
-**Code Quality:**
-- Readability: Code structure and naming
-- Code Style: Adherence to C/C++ conventions
-- Documentation: Comments and explanations
-
-**Algorithm Quality:**
-- Algorithm Appropriateness: Suitability for the problem
-- Solver Choice: Optimal PETSc solver selection
-
-**PETSc Quality:**
-- Best Practices: PETSc usage patterns
-- Error Handling: Proper error checking
-- Parallel Awareness: MPI and parallel considerations
+- **Gates**: binary pass/fail checks (e.g., compilation/execution/API usage)
+- **Metrics**: quantitative measurements (e.g., numerical accuracy, execution time)
+- **Quality**: LLM-based qualitative assessment (e.g., code style, algorithm choice, PETSc best practices)
 
 ## Benchmark Problems
 
-The benchmark suite is designed to comprehensively test PETSc code generation across **diverse computational domains**, **varying difficulty levels**, and **different PETSc components**. All problems support **MPI parallelization** and the framework is **easily extensible** with custom problems.
+Benchmark problems are defined as JSON files under `data/`. The Green Agent loads **all** JSON files in that directory.
 
-### Key Features
+Each problem file is expected to contain (at minimum):
 
-✨ **Diversity**: Covers ODEs, PDEs, and optimization across multiple scientific domains  
-🎯 **Difficulty Range**: From medium (advection) to high (stiff systems) complexity  
-🔧 **Extensibility**: Simple JSON format for adding new benchmark problems  
-⚡ **MPI-Ready**: All problems can be executed in parallel with multiple MPI ranks  
-🧩 **Component Coverage**: Tests TS (time-stepping), TAO (optimization), Vec, Mat, and more
+- `problem_name`
+- `problem_id`
+- `problem_description`
 
-### Current Benchmark Suite
+Current suite (see `data/` for full definitions):
 
-### 1. Robertson ODE (Stiff System)
-
-**Problem Type**: Time-dependent Ordinary Differential Equations  
-**PETSc Components**: TS (Time Stepper)  
-**Difficulty**: High (stiff system with multiple time scales)
-
-**Description**:  
-A classic benchmark for stiff ODE solvers modeling a chemical reaction system:
-
-```
-dy₁/dt = -0.04y₁ + 10⁴y₂y₃
-dy₂/dt = 0.04y₁ - 10⁴y₂y₃ - 3×10⁷y₂²
-dy₃/dt = 3×10⁷y₂²
-```
-
-**Initial Conditions**: y₁=1, y₂=0, y₃=0 at t=0  
-**Time Range**: [0, 100]  
-**Expected Solution**: y₁≈0.617, y₂≈5.61×10⁻⁶, y₃≈0.383
-
-**Key Challenges**:
-- Extreme stiffness (time scales differ by ~7 orders of magnitude)
-- Requires implicit time stepping (Crank-Nicolson)
-- Careful tolerance selection for accuracy
-- Tests IFunction/IJacobian implementation
-
-**Test Configuration**:
-```bash
--ts_type cn -ts_time_step 1e-7 -ts_adapt_type basic -ts_exact_final_time matchstep
-```
-
----
-
-### 2. 1D Advection PDE
-
-**Problem Type**: Time-dependent Partial Differential Equation  
-**PETSc Components**: TS (Time Stepper), Vec, DA (Distributed Array)  
-**Difficulty**: Medium (hyperbolic PDE with periodic boundaries)
-
-**Description**:  
-Linear advection equation modeling wave propagation:
-
-```
-∂u/∂t + c∂u/∂x = 0
-```
-
-**Domain**: x ∈ [0,1] with periodic boundary conditions  
-**Initial Condition**: u(x,0) = sin(2πx)  
-**Time Range**: [0, 1]  
-**Advection Speed**: c (constant)
-
-**Key Challenges**:
-- Spatial discretization (first-order upwind scheme)
-- Periodic boundary condition handling
-- Uniform grid management
-- Stability constraints (CFL condition)
-- Tests RHSFunction for explicit time stepping
-
-**Test Configuration**:
-```bash
--ts_type rk -ts_rk_type 4
-```
-
----
-
-### 3. Rosenbrock Optimization (Banana Function)
-
-**Problem Type**: Unconstrained Nonlinear Optimization  
-**PETSc Components**: TAO (Toolkit for Advanced Optimization)  
-**Difficulty**: Medium (narrow curved valley, ill-conditioned)
-
-**Description**:  
-Classic optimization benchmark with a narrow, banana-shaped valley:
-
-```
-f(x,y) = (1-x)² + 100(y-x²)²
-```
-
-**Global Minimum**: (x,y) = (1,1) with f(1,1) = 0
-
-**Key Challenges**:
-- Highly ill-conditioned (valley is 100× narrower than wide)
-- Tests gradient computation accuracy
-- Requires quasi-Newton methods (LMVM)
-- Convergence monitoring
-- Modern PetscCall() error handling style
-
-**Test Configuration**:
-```bash
--tao_view -tao_monitor
-```
-
----
-
-### Problem Dataset Format
-
-Benchmark problems are stored in JSON format in the `data/` directory:
-
-```json
-{
-  "problem_name": "Problem_Name",
-  "problem_id": "unique_id",
-  "problem_description": "Detailed problem specification...",
-  "test_cases": [
-    {
-      "args": "-solver_options",
-      "expected_output": [numerical_values]
-    }
-  ]
-}
-```
+- Robertson ODE
+- 1D Advection
+- Rosenbrock optimization
+- Darcy flow
+- 2D Navier–Stokes
+- Vec/MPI tests
 
 ### Evaluation Criteria
 
-Each problem is evaluated across multiple dimensions:
+Each problem is evaluated across multiple dimensions (see `config/green_agent_config.yaml` for weights):
 
-1. **Correctness** (35%): Numerical accuracy, equation implementation, boundary conditions
-2. **Algorithm Choice** (15%): Solver selection, discretization method appropriateness
-3. **Code Quality** (15%): Readability, conventions, documentation
-4. **Performance** (15%): Execution time, convergence rate
-5. **PETSc Best Practices** (10%): Runtime configurability, error handling
-6. **Semantic Correctness** (10%): Physics preservation, stability
+- Correctness
+- Performance
+- Code quality
+- Algorithm choice
+- PETSc best practices
+- Semantic correctness
 
 ## Output
 
-Evaluation results are saved to the `output/` directory:
+### Files written to disk
 
-- `benchmark_summary.json`: Overall statistics and per-problem results
-- `evaluation_report.txt`: Human-readable summary report
-- `evaluation_detailed_report.json`: Detailed scores and feedback
-- `benchmark_result_<problem_name>.json`: Individual problem results
+The Green Agent writes a single file to `output/`:
+
+- `output/benchmark_summary.json`: overall summary + per-problem results
+
+### Task artifacts
+
+The Green Agent also emits A2A task artifacts (via `TaskUpdater.add_artifact`). Depending on your runner/integration, these may be downloadable from logs/UI but are not written to `output/` by default:
+
+- `benchmark_summary.json`
+- `evaluation_report.txt`
+- `evaluation_detailed_report.json`
+- `benchmark_result_<problem_name>.json`
 
 ### Tier System
 
@@ -433,14 +302,15 @@ Codes are assigned to tiers based on composite scores:
 
 ## Development
 
-### Adding Custom Evaluators
+### Adding custom evaluators
+
+Evaluators live under `src/evaluators/` and are wired into the pipeline in `src/evaluators/pipeline.py`.
 
 To add a new evaluator:
 
-1. Create a new evaluator class inheriting from `Evaluator`
-2. Implement required properties: `name`, `evaluator_type`, `evaluation_method`
-3. Implement the `evaluate()` method
-4. Add to the pipeline in `src/evaluators/pipeline.py`
+1. Create a class inheriting from `src.evaluators.base.Evaluator`
+2. Implement `name`, `evaluator_type`, and `evaluate(...)`
+3. Add the evaluator to the pipeline
 
 Example:
 
@@ -455,37 +325,34 @@ class MyCustomEvaluator(Evaluator):
     @property
     def evaluator_type(self) -> EvaluatorType:
         return EvaluatorType.QUALITY
-    
-    async def evaluate(self, code, problem, execution_result):
-        # Your evaluation logic here
+
+    async def evaluate(self, code: str, problem: dict, execution_result: dict | None = None) -> EvaluationResult:
         return EvaluationResult(
             evaluator_name=self.name,
             evaluator_type=self.evaluator_type,
             quality_score=0.8,
-            feedback="Custom evaluation passed"
+            feedback="Custom evaluation passed",
+            evaluation_method="deterministic",
+            confidence=1.0,
         )
 ```
 
 ### Caching
 
-The Green Agent supports caching Purple Agent responses to speed up development:
-
-```python
-# In src/green_agent/agent.py
-agent = Agent(
-    purple_agent_url=purple_url,
-    mcp_server_url=mcp_url,
-    use_cache=True  # Enable caching
-)
-```
-
-Cached responses are stored in `purple_agent_cache/`.
+The Green Agent can cache Purple Agent responses (pickled per problem) to speed up development iteration. Cached responses are stored in `purple_agent_cache/`.
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **PETSc not found**: Ensure `PETSC_DIR` and `PETSC_ARCH` are set correctly in `.env`
-2. **LLM API errors**: Verify API keys are valid and have sufficient quota
-3. **Agent timeout**: Increase timeout in `src/util/a2a_comm.py` if needed
-4. **Port conflicts**: Modify ports in `src/launcher.py` if defaults are in use
+1. **Wrong Python version**: This repo requires Python **3.12+** (see `pyproject.toml`).
+2. **PETSc not found**: Ensure `PETSC_DIR` and `PETSC_ARCH` are set correctly in `.env`.
+3. **LLM API/proxy errors**:
+   - Verify API keys are valid and have sufficient quota.
+   - If using an OpenAI-compatible proxy (Argo/AskSage), ensure `api_base_url` is set correctly in the relevant config.
+   - For AskSage endpoints, ensure `ASKSAGE_API_KEY` and `ASKSAGE_SSL_CERT_FILE` are set.
+4. **Agent connectivity / timeouts**:
+   - Confirm the Green and Purple URLs/ports match your deployment.
+   - If agents are slow to start, you may need to increase timeouts in `src/util/a2a_comm.py`.
+5. **Port conflicts**: Modify ports in `src/launcher.py` if defaults are in use (Green `9001`, Purple `9002`, MCP `8080`).
+6. **Missing output files**: Only `output/benchmark_summary.json` is written to disk by default; other reports are emitted as task artifacts.

@@ -1,8 +1,16 @@
-# PETSc Code Evaluation System - Implementation Summary (Updated)
+# PETSc Code Evaluation System - Implementation Summary
 
 ## Overview
 
-A comprehensive evaluation framework for assessing generated PETSc code with **14 evaluators** across 3 evaluation types, **fully integrated** into the Green Agent benchmarking pipeline.
+This document describes the implementation of the PETSc code evaluation system as wired into the Green Agent.
+
+- Evaluation is performed by **14 evaluators** (when all phases are enabled):
+  - Gates: 4
+  - Metrics: 2
+  - Quality: 8
+- Evaluator outputs are aggregated into category scores and a composite score (0–100), then mapped to tiers.
+
+> Note: Some evaluators depend on fields that may not exist in all datasets (e.g., numerical accuracy requires `test_cases.expected_output`). Where data is missing, those evaluators may be skipped and/or contribute 0 to the final score.
 
 ## Architecture
 
@@ -69,8 +77,8 @@ A comprehensive evaluation framework for assessing generated PETSc code with **1
 |--------|------|--------|----------|
 | **Compilation** | Code compiles successfully | Deterministic | ✅ |
 | **Execution** | Runs without crash | Deterministic | ✅ |
-| **Memory Safety** | No leaks/errors (Valgrind) | Deterministic | ✅ |
-| **API Usage** | PetscInit/Finalize present | Static Analysis | ✅ |
+| **Memory Safety** | Memory-safety signals (valgrind output if provided, otherwise stderr heuristics) | Deterministic | ✅ |
+| **API Usage** | `PetscInitialize`/`PetscFinalize` present and PETSc include detected | Deterministic (static analysis) | ✅ |
 
 **If ANY gate fails → Overall score = 0 (FAIL)**
 
@@ -78,8 +86,8 @@ A comprehensive evaluation framework for assessing generated PETSc code with **1
 
 | Metric | Raw Value | Normalized Score | Method |
 |--------|-----------|------------------|--------|
-| **Numerical Accuracy** | Error norm | exp(-error/tol) | Deterministic |
-| **Execution Time** | Seconds | baseline/actual | Deterministic |
+| **Numerical Accuracy** | Error norm | exp(-error/tol) | Deterministic (requires `problem.test_cases[0].expected_output`) |
+| **Execution Time** | Seconds | tiered piecewise-linear score (see `execution_time` config) | Deterministic |
 
 ### 3. Quality (8) - Subjective Assessments
 
@@ -100,7 +108,7 @@ A comprehensive evaluation framework for assessing generated PETSc code with **1
 | Metric | Assessment | Method |
 |--------|------------|--------|
 | **Best Practices** | CLI options, viewers | LLM |
-| **Error Handling** | CHKERRQ usage | Deterministic |
+| **Error Handling** | PETSc error handling patterns | Deterministic |
 | **Parallel Awareness** | MPI-aware code | Deterministic |
 
 ## Implementation Structure
@@ -144,13 +152,11 @@ petscagent_bench/
 │   │   ├── types.py                   # Data structures
 │   │   └── aggregation.py             # Scoring logic
 │   ├── util/
-│   │   └── llm_client.py              # OpenAI wrapper
+│   │   └── llm_client.py              # LiteLLM-based client
 │   └── green_agent/
 │       └── agent.py                   # ✅ INTEGRATED
 ├── config/
-│   └── evaluation_config.yaml         # Configuration
-└── examples/
-    └── evaluation_example.py          # Usage example
+│   └── green_agent_config.yaml        # Evaluation + scoring + Green LLM config
 ```
 
 ## Key Design Decisions
@@ -188,7 +194,7 @@ else:
         0.15 × code_quality +      # Readability, style, docs
         0.15 × algorithm +         # Algorithm, solver
         0.10 × petsc +             # Best practices
-        0.10 × semantic            # (Reserved for future use)
+        0.10 × semantic            # NOTE: no evaluators currently map to `semantic`, so it defaults to 0 unless you change weights or add evaluators
     )
 ```
 
@@ -218,111 +224,93 @@ class BenchmarkResult:
     evaluation_details: Optional[List[Dict[str, Any]]] = None
 ```
 
-### Agent Initialization
+### Agent initialization (Green Agent)
+
+In `src/green_agent/agent.py`, the Green Agent initializes the evaluation system like this:
 
 ```python
-class Agent():
-    def __init__(self, purple_agent_url, mcp_server_url, max_num_prob=None, use_cache=True):
-        # ... existing setup ...
-        
-        # Initialize evaluation system with config from file or defaults
-        eval_config = load_evaluation_config()
-        self.evaluation_pipeline = EvaluationPipeline(eval_config)
-        self.metrics_aggregator = MetricsAggregator(eval_config)
-        
-        print(f"✅ Evaluation system initialized with {self.evaluation_pipeline.get_evaluator_count()['total']} evaluators")
+# Initialize evaluation system with config from file or defaults
+# (default path: config/green_agent_config.yaml)
+eval_config = load_green_agent_config()
+self.eval_config = eval_config
+self.evaluation_pipeline = EvaluationPipeline(eval_config, self.model, self.api_base_url)
+self.metrics_aggregator = MetricsAggregator(eval_config)
+
+print(
+    f"@@@ Green agent: ✅ Evaluation system initialized with "
+    f"{self.evaluation_pipeline.get_evaluator_count()['total']} evaluators"
+)
 ```
 
-### Evaluation Workflow
+### Evaluation workflow (high level)
+
+In `src/green_agent/agent.py`, for each problem the Green Agent:
+
+1. Requests code from the Purple Agent (optionally using cache)
+2. Uploads files to the MCP server
+3. Compiles and runs the code
+4. Runs the evaluation pipeline and aggregates scores
+5. Emits per-problem artifacts and final summary artifacts
+
+### Evaluation method (code)
+
+The evaluation method in `src/green_agent/agent.py` builds an `execution_result` dict, runs the pipeline, then aggregates:
 
 ```python
-async def run(self, message, updater):
-    for idx, data in enumerate(test_data[:limit]):
-        # 1. Get code from purple agent (with caching)
-        # 2. Compile and run code
-        # 3. NEW: Evaluate code
-        
-        if generated_codes:
-            await self._evaluate_code(benchmark_result, data, generated_codes)
-        
-        # 4. Update summary with tier distribution
-        if br.tier:
-            summary["tier_distribution"][br.tier] += 1
-    
-    # 5. Generate comprehensive evaluation report
-    await self._create_evaluation_report(results, summary, updater)
-```
+execution_result = {
+    'compiles': benchmark_result.compiles,
+    'runs': benchmark_result.runs,
+    'stdout': benchmark_result.stdout or '',
+    'stderr': benchmark_result.stderr or '',
+    'execution_time_sec': benchmark_result.time_used_sec,
+    'memory_mb': None,  # TODO: Add memory tracking if available
+}
 
-### Private Evaluation Method
+# Run evaluation pipeline
 
-```python
-async def _evaluate_code(
-    self,
-    benchmark_result: BenchmarkResult,
-    problem_data: Dict[str, Any],
-    generated_codes: List[str],
-) -> None:
-    """Run evaluation pipeline on generated codes."""
-    
-    # Prepare execution result
-    execution_result = {
-        'compiles': benchmark_result.compiles,
-        'runs': benchmark_result.runs,
-        'stdout': benchmark_result.stdout or '',
-        'stderr': benchmark_result.stderr or '',
-        'execution_time_sec': benchmark_result.time_used_sec,
-        'memory_mb': None,
-    }
-    
-    # Run evaluation pipeline
-    eval_results = await self.evaluation_pipeline.evaluate(
-        code=generated_codes[0],
-        problem=problem_data,
-        execution_result=execution_result
-    )
-    
-    # Aggregate results
-    aggregated = self.metrics_aggregator.aggregate(eval_results)
-    
-    # Update benchmark result
-    benchmark_result.composite_score = aggregated.composite_score
-    benchmark_result.tier = aggregated.overall_tier
-    benchmark_result.category_scores = {
-        'correctness': aggregated.category_scores.correctness,
-        'performance': aggregated.category_scores.performance,
-        'code_quality': aggregated.category_scores.code_quality,
-        'algorithm': aggregated.category_scores.algorithm,
-        'petsc': aggregated.category_scores.petsc,
-    }
+
+eval_results = await self.evaluation_pipeline.evaluate(
+    code=generated_codes[0],
+    problem=problem_data,
+    execution_result=execution_result,
+)
+
+# Aggregate results
+aggregated = self.metrics_aggregator.aggregate(eval_results)
+
+# Update benchmark result
+benchmark_result.composite_score = aggregated.composite_score
+benchmark_result.tier = aggregated.overall_tier
+benchmark_result.category_scores = {
+    'correctness': aggregated.category_scores.correctness,
+    'performance': aggregated.category_scores.performance,
+    'code_quality': aggregated.category_scores.code_quality,
+    'algorithm': aggregated.category_scores.algorithm,
+    'petsc': aggregated.category_scores.petsc,
+}
 ```
 
 ## Configuration System
 
-### YAML Configuration (config/evaluation_config.yaml)
+### YAML configuration (`config/green_agent_config.yaml`)
+
+The repo’s default config contains additional comments and evaluator-specific sections; below is an abridged excerpt of the keys the evaluation system consumes:
 
 ```yaml
 evaluation:
-  # Enable/disable evaluation phases
   enable_gates: true
   enable_metrics: true
   enable_quality: true
-  
-  # LLM settings for quality evaluators
-  llm:
-    model: "openai/gpt-4o-mini"
-    temperature: 0.3
-    max_concurrent_calls: 3  # Rate limiting
-  
-  # Performance settings
-  parallel_evaluation: true
-  
-  # LLM Thresholds
-  thresholds:
-    min_llm_confidence: 0.7
 
-# Scoring configuration
+  llm:
+    model: "openai/gpt52"
+    api_base_url: "https://apps-dev.inside.anl.gov/argoapi/v1"  # set to null to use provider default
+    temperature: 0
+    max_concurrent_calls: 3
+
+  parallel_evaluation: true
+
 scoring:
-  # Category weights (must sum to 1.0)
   weights:
     correctness: 0.35
     performance: 0.15
@@ -330,44 +318,33 @@ scoring:
     algorithm: 0.15
     petsc: 0.10
     semantic: 0.10
-  
-  # Tier thresholds (0-100 scale)
+
   tiers:
     gold: 85
     silver: 70
     bronze: 50
+
+# Metric configurations
+numerical_accuracy:
+  error_tolerance: 1.0e-3
+  error_threshold: 1.0e-3
+
+execution_time:
+  excellent_time_sec: 1.0
+  good_time_sec: 5.0
+  acceptable_time_sec: 15.0
+  max_time_sec: 60.0
+  max_slowdown_factor: 2.0
 ```
 
-### Configuration Loading
+### Configuration loading
 
-Supports multiple formats with graceful fallback:
+The Green Agent loads configuration via `load_green_agent_config()` in `src/green_agent/agent.py`.
+The default path is:
 
-```python
-def load_evaluation_config(config_path: str = "config/evaluation_config.yaml") -> Dict[str, Any]:
-    """Load evaluation configuration from file or use defaults.
-    
-    Supports both JSON and YAML formats. Format is auto-detected by file extension.
-    Falls back to sensible defaults if config file not found.
-    """
-    config_file = Path(config_path)
-    
-    if config_file.exists():
-        try:
-            with open(config_file, 'r') as f:
-                if config_file.suffix.lower() in ['.yaml', '.yml']:
-                    import yaml
-                    config_data = yaml.safe_load(f)
-                else:
-                    config_data = json.load(f)
-            
-            print(f"✅ Loaded evaluation config from {config_path}")
-            return config_data
-        except Exception as e:
-            print(f"⚠️ Failed to load config: {e}")
-    
-    # Fall back to defaults
-    return { /* default config */ }
-```
+- `config/green_agent_config.yaml`
+
+YAML and JSON are supported (format detected by file extension).
 
 ## Output Format
 
@@ -420,116 +397,40 @@ PER-PROBLEM RESULTS
    Correctness: 75.0, Performance: 65.0, Code Quality: 60.0
 ```
 
-### JSON Output (output/benchmark_summary.json)
+### JSON output (`output/benchmark_summary.json`)
+
+The Green Agent writes a JSON file with this top-level structure:
 
 ```json
 {
-  "summary": {
-    "total": 3,
-    "runs_count": 3,
-    "failure_count": 0,
-    "avg_time_sec": 2.45,
-    "avg_composite_score": 76.3,
-    "tier_distribution": {
-      "GOLD": 1,
-      "SILVER": 1,
-      "BRONZE": 1,
-      "FAIL": 0
-    }
-  },
-  "results": [
-    {
-      "problem_name": "Advection_PDE",
-      "problem_id": "adv_001",
-      "runs": true,
-      "time_used_sec": 2.1,
-      "compiles": true,
-      "composite_score": 87.5,
-      "tier": "GOLD",
-      "category_scores": {
-        "correctness": 92.0,
-        "performance": 85.0,
-        "code_quality": 78.0,
-        "algorithm": 88.0,
-        "petsc": 82.0
-      },
-      "evaluation_summary": {
-        "total_evaluators": 14,
-        "passed_evaluators": 13,
-        "failed_evaluators": 1,
-        "all_gates_passed": true,
-        "gates_passed": 4,
-        "gates_total": 4
-      },
-      "evaluation_details": [
-        {
-          "name": "compilation",
-          "type": "gate",
-          "method": "deterministic",
-          "passed": true,
-          "score": null,
-          "raw_value": null,
-          "confidence": 1.0,
-          "feedback": "Code compiled successfully"
-        },
-        {
-          "name": "numerical_accuracy",
-          "type": "metric",
-          "method": "deterministic",
-          "passed": null,
-          "score": 0.95,
-          "raw_value": 1.2e-8,
-          "confidence": 1.0,
-          "feedback": "Excellent numerical accuracy"
-        }
-      ]
-    }
-  ]
+  "agent": "<purple_id>",
+  "summary": { /* ... */ },
+  "results": [ /* ... */ ]
 }
 ```
 
-### Detailed Evaluation Report (evaluation_detailed_report.json)
+Notes:
 
-```json
-{
-  "summary": {
-    "total": 3,
-    "avg_composite_score": 76.3,
-    "tier_distribution": { "GOLD": 1, "SILVER": 1, "BRONZE": 1, "FAIL": 0 }
-  },
-  "per_problem_scores": [
-    {
-      "problem_name": "Advection_PDE",
-      "problem_id": "adv_001",
-      "tier": "GOLD",
-      "composite_score": 87.5,
-      "category_scores": {
-        "correctness": 92.0,
-        "performance": 85.0,
-        "code_quality": 78.0,
-        "algorithm": 88.0,
-        "petsc": 82.0
-      },
-      "evaluation_summary": {
-        "total_evaluators": 14,
-        "passed_evaluators": 13,
-        "failed_evaluators": 1,
-        "all_gates_passed": true
-      }
-    }
-  ]
-}
-```
+- `agent` is populated from the `<purple_id>` tag passed to the Green Agent.
+- Each entry in `results` contains execution fields plus evaluation fields.
+
+### Detailed evaluation report (`evaluation_detailed_report.json`)
+
+This report is emitted as a **task artifact** (not written to `output/` by default). It contains:
+
+- summary statistics
+- per-problem tier/composite score/category scores
 
 ## Purple Agent Caching System
 
 The Green Agent includes a **caching system** to avoid redundant Purple Agent calls:
 
 ```python
-def __init__(self, purple_agent_url, mcp_server_url, max_num_prob=None, use_cache=True):
-    self.use_cache = use_cache
-    self.cache_dir = Path("./purple_agent_cache")
-    self.cache_dir.mkdir(exist_ok=True)
+# In src/green_agent/agent.py
+# Caching is controlled by the `use_cache` flag.
+self.use_cache = use_cache
+self.cache_dir = Path("./purple_agent_cache")
+self.cache_dir.mkdir(exist_ok=True)
 
 def _get_cache_path(self, problem_name: str) -> Path:
     """Get the cache file path for a given problem."""
@@ -557,16 +458,20 @@ def _save_cached_response(self, problem_name: str, response):
 - 🔄 Consistent results for testing evaluation changes
 - 📁 Stored in `./purple_agent_cache/` as `.pkl` files
 
-## Performance & Cost
+## Performance & cost
 
-### Evaluation Time
+Actual runtime and token cost depend heavily on:
 
-| Configuration | Time | Cost (per problem) |
-|---------------|------|--------------------| 
-| Gates + Metrics only | ~200ms | $0.00 |
-| + Quality (static) | ~500ms | $0.00 |
-| + Quality (LLM mini) | ~30-45s | ~$0.01-0.02 |
-| + Quality (LLM gpt-4o) | ~30-45s | ~$0.10-0.15 |
+- number of problems
+- which evaluators are enabled (`evaluation.enable_*`)
+- which quality evaluators use LLM vs static analysis (`use_llm` flags)
+- the configured model/provider (`evaluation.llm.model`, `evaluation.llm.api_base_url`)
+
+General guidance:
+
+- **Gates + metrics only**: typically fast (no LLM calls).
+- **Quality with static analysis**: still fast (no LLM calls).
+- **Quality with LLM**: can be slow and can consume significant tokens; consider rate limiting with `evaluation.llm.max_concurrent_calls`.
 
 ### Optimization Strategies
 
@@ -575,65 +480,58 @@ def _save_cached_response(self, problem_name: str, response):
    enable_quality: false  # Skip LLM evaluations
    ```
 
-2. **Production**: 
-   ```yaml
-   llm:
-     model: "openai/gpt-4o-mini"  # Good quality/cost ratio
-   ```
+2. **Hybrid approach**:
 
-3. **Research/High Quality**: 
-   ```yaml
-   llm:
-     model: "openai/gpt-4o"  # Best quality
-   ```
+   The following `use_llm` switches are implemented in the code-quality evaluators and will switch those evaluators to static heuristics:
 
-4. **Hybrid Approach**: 
    ```yaml
    readability:
      use_llm: false  # Use static analysis
    code_style:
      use_llm: false
-   # Keep LLM for algorithm quality
+   documentation:
+     use_llm: false
    ```
 
 ## Usage Examples
 
-### Running the Full Benchmark
+### Running the full benchmark locally
 
 ```bash
-# Run with evaluation enabled (default)
-python main.py
-
-# Or use the launcher
-python src/launcher.py
+uv run main.py launch
 ```
 
-### Quick Test Without LLM
+### Quick test without LLM quality evaluators
 
-Edit `config/evaluation_config.yaml`:
+Edit `config/green_agent_config.yaml`:
+
 ```yaml
 evaluation:
   enable_quality: false  # Fast mode
 ```
 
-### Standalone Evaluation
+### Standalone evaluation
 
 ```python
 from src.evaluators import EvaluationPipeline
 from src.metrics import MetricsAggregator
-from src.green_agent.agent import load_evaluation_config
+from src.green_agent.agent import load_green_agent_config
 
 # Initialize
-config = load_evaluation_config()
-pipeline = EvaluationPipeline(config)
+config = load_green_agent_config()
+
+# The pipeline needs a model/api_base_url for LLM-based quality evaluators
+pipeline = EvaluationPipeline(config, model="openai/gpt52", api_base_url=None)
 aggregator = MetricsAggregator(config)
 
-# Prepare execution result
+# Prepare execution result (keys used by metrics/gates)
 execution_result = {
     'compiles': True,
     'runs': True,
     'stdout': '...',
+    'stderr': '',
     'execution_time_sec': 2.5,
+    'memory_mb': None,
 }
 
 # Evaluate
@@ -643,6 +541,10 @@ metrics = aggregator.aggregate(results)
 print(f"Score: {metrics.composite_score:.1f}/100")
 print(f"Tier: {metrics.overall_tier}")
 ```
+
+Notes:
+
+- `NumericalAccuracyMetric` only runs when `problem_data` includes `test_cases[0].expected_output`.
 
 ### Custom Evaluator
 
@@ -722,52 +624,42 @@ src/metrics/
 └── aggregation.py                       # ✅ MetricsAggregator
 
 src/util/
-└── llm_client.py                        # ✅ OpenAI wrapper
+└── llm_client.py                        # ✅ LiteLLM-based client
 
 src/green_agent/
 └── agent.py                             # ✅ FULLY INTEGRATED
 
 config/
-└── evaluation_config.yaml               # ✅ Configuration
-
-examples/
-└── evaluation_example.py                # ✅ Usage example
+└── green_agent_config.yaml              # ✅ Evaluation + scoring + Green LLM config
 ```
 
-### Generated Output
+### Outputs
+
+**Written to disk**:
 
 ```
 output/
-├── benchmark_summary.json               # Main results with evaluations
-├── benchmark_result_{problem}.json      # Per-problem detailed results
-├── evaluation_report.txt                # Human-readable summary
-└── evaluation_detailed_report.json      # Detailed evaluation breakdown
-
-purple_agent_cache/
-├── Advection_PDE.pkl                    # Cached responses
-├── Robertson_ODE.pkl
-└── Rosenbrock_banana_function.pkl
-
-generated_codes/
-├── Advection_PDE.c                      # Generated code files
-├── Robertson_ODE.c
-└── Rosenbrock_banana_function.c
+└── benchmark_summary.json
 ```
 
-## Production Status
+**Emitted as task artifacts** (via `TaskUpdater.add_artifact`):
 
-✅ **Complete implementation** with all 14 evaluators
+- `benchmark_summary.json`
+- `evaluation_report.txt`
+- `evaluation_detailed_report.json`
+- `benchmark_result_<problem_name>.json`
 
-✅ **Fully integrated** with Green Agent benchmarking
+**Cached responses**:
 
-✅ **Configurable** via YAML/JSON
+```
+purple_agent_cache/
+└── *.pkl
+```
 
-✅ **Well-documented** with README and examples
+## Status
 
-✅ **Tested** on real PETSc problems
-
-✅ **Caching** for efficient development
-
-✅ **Comprehensive reporting** with multiple output formats
-
-✅ **Production-ready** and actively running
+- ✅ Implemented with 14 evaluators (when all phases are enabled)
+- ✅ Integrated into the Green Agent benchmarking pipeline
+- ✅ Configurable via `config/green_agent_config.yaml`
+- ✅ Emits summary results to disk (`output/benchmark_summary.json`) and additional reports as task artifacts
+- ✅ Supports caching of Purple Agent responses (`purple_agent_cache/`)

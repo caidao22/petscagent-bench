@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from src.util.a2a_comm import send_message
 import argparse
 
@@ -26,9 +27,13 @@ Purple agent's AgentBeats ID is
     print("Task description:")
     print(task_text)
     print("Sending...")
-    response = await send_message(green_url, task_text)
-    print("Response from green agent:")
-    print(response)
+    try:
+        response = await send_message(green_url, task_text)
+        print("Response from green agent:")
+        print(response)
+    except Exception as e:
+        print(f"Error communicating with green agent: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Signal the green agent to start the benchmark.")

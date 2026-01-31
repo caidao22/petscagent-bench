@@ -180,9 +180,9 @@ uv run src/purple_agent/petsc_agent.py
 ```
 For MCP server deployment, refer to [https://gitlab.com/petsc/petsc_mcp_servers](https://gitlab.com/petsc/petsc_mcp_servers)
 
-To launch the complete evaluation workflow, collect the URLs for agents and the MCP sever, set them properly in `src/client_cli.py`, and run
+To launch the complete evaluation workflow, collect the URLs for agents and the MCP server, and run:
 ```bash
-uv run src/client_cli.py
+uv run src/client_cli.py --green-url <GREEN_URL> --purple-url <PURPLE_URL> --mcp-server-url <MCP_URL>
 ```
 
 

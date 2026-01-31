@@ -204,7 +204,8 @@ class PetscAgentExecutor(AgentExecutor):
                 'messages': messages,
                 'model': self.model,
                 'temperature': 0.0,
-                'response_format': ProblemResponse
+                'response_format': ProblemResponse,
+                'timeout': 300,
             }
             litellm.ssl_verify = False
             if self.api_base_url:

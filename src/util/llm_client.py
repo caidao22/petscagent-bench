@@ -57,6 +57,7 @@ class LLMClient:
                 'messages': messages,
                 'temperature': self.temperature,
                 'response_format': {"type": "json_object"},
+                'timeout': 300,
             }
             litellm.ssl_verify = False
             if self.api_base_url:

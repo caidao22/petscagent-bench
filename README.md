@@ -6,6 +6,8 @@ An agentified evaluation framework for testing PETSc code generation agents usin
 
 This repository implements a multi-agent benchmark for evaluating code generation agents that produce PETSc (Portable, Extensible Toolkit for Scientific Computation) programs.
 
+> 📖 See [MOTIVATION.md](MOTIVATION.md) for the motivation and design rationale behind this project.
+
 Core building blocks:
 
 - **A2A Protocol**: standardized agent-to-agent communication over HTTP.
@@ -21,61 +23,44 @@ High-level flow:
 
 > Note: Running the benchmark can consume significant LLM tokens depending on the model and number of problems.
 
-### Why PETSc?
-
-PETSc represents a **uniquely challenging domain** for code generation agents, making it an ideal benchmark for evaluating LLM capabilities in scientific computing:
-
-**🔬 Scientific Computing Complexity**
-- **Domain Expertise Required**: Demands deep understanding of numerical methods, PDEs, linear algebra, and computational science
-- **Mathematical Rigor**: Correct equation discretization, stability analysis, and convergence requirements
-- **Performance Critical**: Solutions must be numerically accurate AND computationally efficient
-
-**🏗️ Software Engineering Challenges**
-- **Large API Surface**: 1000+ functions across diverse components (TS, SNES, KSP, TAO, DM, Vec, Mat)
-- **Complex Abstractions**: Multi-level solver hierarchies
-- **Error Handling Discipline**: Mandatory error checking (PetscCall) throughout
-- **Configuration Complexity**: Runtime options database, solver selection, performance tuning
-
-**⚡ Parallel Computing Demands**
-- **MPI Programming**: Distributed data structures, domain decomposition, parallel communication
-- **Scalability Concerns**: Load balancing, ghost values, efficient parallel I/O
-- **Hardware Awareness**: GPU acceleration (CUDA/HIP backends)
-
-**📚 Documentation and Best Practices**
-- **Style Requirements**: Specific PETSc naming conventions and code organization
-- **Modern Standards**: Evolution from PetscCall error handling
-- **Performance Patterns**: Optimal usage of viewers, options, logging, and monitoring
-
-**🎯 Real-World Impact**
-
-PETSc is used in production by thousands of researchers and engineers across:
-- Climate modeling and weather prediction
-- Computational fluid dynamics
-- Material science and chemistry
-- Astrophysics and cosmology
-- Subsurface flow and reservoir simulation
-- Structural mechanics and optimization
-See https://petsc.org/main/miscellaneous/applications_publications/ for more details
-
-**Why This Matters for LLM Evaluation**:
-
-1. **Beyond Toy Problems**: PETSc benchmarks test whether LLMs can handle real scientific software, not just algorithmic puzzles
-
-2. **Correctness is Verifiable**: Unlike creative tasks, scientific computations have ground truth - wrong answers are measurable
-
-3. **Multi-Dimensional Quality**: Success requires simultaneously achieving:
-   - Mathematical correctness
-   - Software engineering best practices
-   - Performance efficiency
-   - Parallel scalability
-
-4. **Transferable Skills**: Mastery of PETSc code generation indicates capability for other complex scientific/engineering domains (deal.II, Trilinos, hypre, SUNDIALS)
-
-5. **High Stakes**: Errors in scientific software can lead to incorrect research conclusions, failed simulations, or wasted supercomputer time
-
-By benchmarking on PETSc, we evaluate whether LLMs can truly assist in **mission-critical scientific computing** - not just generate syntactically correct code, but produce scientifically valid, performant, and maintainable solutions.
-
 ## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Input
+        P["📋 Problem<br/>JSON (data/*.json)"]
+    end
+
+    subgraph Agents
+        Purple["🟣 Purple Agent<br/>Code Generator<br/>Returns code files + metadata:<br/>`main_file`, `dependencies`, `cli_args`"]
+        Green["🟢 Green Agent<br/>Evaluator<br/>Packages files & forwards to MCP"]
+    end
+
+    subgraph Execution
+        MCP["⚙️ MCP Server<br/>Compile & Run<br/>(updates Makefile/build recipe)"]
+    end
+
+    subgraph Artifacts
+        A["🧾 Artifacts<br/>compile stdout/stderr, run stdout/stderr, exit code"]
+    end
+
+    subgraph Evaluation
+        E["📊 Evaluate<br/>Gates → Metrics → Quality"]
+    end
+
+    subgraph Output
+        R["📁 Report<br/>Score + Tier"]
+    end
+
+    P --> Green
+    Green -->|"A2A: request code"| Purple
+    Purple -->|"PETSc Code + metadata"| Green
+    Green -->|"Package files; specify `main_file` & deps"| MCP
+    MCP -->|"Compile/Run → Artifacts"| A
+    A -->|"Results & logs"| Green
+    Green --> E
+    E --> R
+```
 
 The system consists of three components:
 
@@ -95,6 +80,17 @@ The system consists of three components:
 
 3. **MCP Server** (tool provider)
    - Provides compilation and execution tools for PETSc code (used by the Green Agent)
+
+### Why PETSc?
+
+PETSc is an ideal benchmark for evaluating LLM capabilities in scientific computing because it demands:
+
+- **Domain expertise**: Numerical methods, PDEs, linear algebra, and parallel computing
+- **Large API surface**: 1000+ functions across solvers (TS, SNES, KSP), data structures (Vec, Mat, DM), and optimizers (TAO)
+- **Correctness and performance**: Solutions must be mathematically accurate *and* computationally efficient
+- **Parallel programming**: MPI, domain decomposition, GPU acceleration (CUDA/HIP)
+
+Unlike toy benchmarks, PETSc code generation tests whether LLMs can produce **scientifically valid, performant, and maintainable** solutions for real-world HPC applications. See [PETSc applications](https://petsc.org/main/miscellaneous/applications_publications/) for examples spanning climate modeling, CFD, astrophysics, and more.
 
 ## Project Structure
 

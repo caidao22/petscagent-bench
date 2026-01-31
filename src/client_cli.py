@@ -2,7 +2,7 @@ import asyncio
 from src.util.a2a_comm import send_message
 import argparse
 
-async def main(green_url: str="http://localhost:9001", purple_url: str="http//localhost:9002", mcp_server_url: str="http://localhost:8080/mcp", green_id="", purple_id=""):
+async def main(green_url: str="http://localhost:9001", purple_url: str="http://localhost:9002", mcp_server_url: str="http://localhost:8080/mcp", green_id="", purple_id=""):
     # send the task description
     print("Sending task description to green agent...")
     task_text = f"""

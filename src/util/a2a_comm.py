@@ -108,12 +108,14 @@ async def send_message(
     Raises:
         Exception: If the agent is unreachable or returns an error
     """
-    # Retrieve agent card to get capabilities and validate endpoint
-    card = await get_agent_card(url)
-
     # Create HTTP client with extended timeout for long-running operations
-    httpx_client = httpx.AsyncClient(timeout=300.0)
+    timeout = httpx.Timeout(connect=30.0, read=300.0, write=30.0, pool=30.0)
+    httpx_client = httpx.AsyncClient(timeout=timeout)
     try:
+        # Retrieve agent card to get capabilities and validate endpoint
+        resolver = A2ACardResolver(httpx_client=httpx_client, base_url=url)
+        card = await resolver.get_agent_card()
+
         client = A2AClient(httpx_client=httpx_client, agent_card=card)
 
         # Generate unique message ID for tracking

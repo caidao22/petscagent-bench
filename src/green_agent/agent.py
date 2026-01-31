@@ -74,69 +74,6 @@ def read_from_json(path):
     return data
 
 
-def load_green_agent_config(config_path: str = "config/green_agent_config.yaml") -> Dict[str, Any]:
-    """Load evaluation configuration from file or use defaults.
-
-    Supports both JSON and YAML formats. Format is auto-detected by file extension.
-
-    Args:
-        config_path: Path to the configuration file
-
-    Returns:
-        Configuration dictionary
-    """
-    config_file = Path(config_path)
-
-    if config_file.exists():
-        try:
-            with open(config_file, 'r') as f:
-                # Detect format by extension
-                if config_file.suffix.lower() in ['.yaml', '.yml']:
-                    import yaml
-                    config_data = yaml.safe_load(f)
-                else:
-                    config_data = json.load(f)
-
-            print(f"@@@ Green agent: ✅ Loaded evaluation config from {config_path}")
-            return config_data
-        except Exception as e:
-            print(f"@@@ Green agent: Failed to load config from {config_path}: {e}")
-            print(f"@@@ Green agent: Using default evaluation configuration")
-    else:
-        print(f"@@@ Green agent: Config file {config_path} not found, using defaults")
-
-    # Fall back to default configuration
-    return {
-        'evaluation': {
-            'enable_gates': True,
-            'enable_metrics': True,
-            'enable_quality': True,
-            'llm': {
-                'model': 'gemini/gemini-3-flash-preview',
-                'api_base_url': None,
-                'temperature': 0.3,
-                'max_concurrent_calls': 3,
-            },
-            'parallel_evaluation': True,
-        },
-        'scoring': {
-            'weights': {
-                'correctness': 0.35,
-                'performance': 0.15,
-                'code_quality': 0.15,
-                'algorithm': 0.15,
-                'petsc': 0.10,
-                'semantic': 0.10,
-            },
-            'tiers': {
-                'gold': 85,
-                'silver': 70,
-                'bronze': 50,
-            },
-        },
-    }
-
-
 @dataclass
 class BenchmarkResult:
     """Container for a single problem's benchmark results.
@@ -186,11 +123,13 @@ class Agent:
 
     The agent distributes test tasks to participant agents, collects their responses, and reports the results.
     """
-    def __init__(self, purple_agent_url, mcp_server_url, model, api_base_url, max_num_prob=None, use_cache=False, green_id=None, purple_id=None):
+    def __init__(self, config: Dict[str, Any], purple_agent_url, mcp_server_url, max_num_prob=None, use_cache=False, green_id=None, purple_id=None):
+        self.config = config
+        self.llm_config = config.get("evaluation", {}).get("llm", {})
+        self.model = self.llm_config.get("model")
+        self.api_base_url = self.llm_config.get("api_base_url")
         self.purple_agent_url = purple_agent_url
         self.mcp_client = PetscCompileRunMCPClient(mcp_server_url)
-        self.model = model
-        self.api_base_url = api_base_url
         self.max_num_prob = max_num_prob
         self.metrics = {}
         self.use_cache = use_cache
@@ -200,11 +139,9 @@ class Agent:
         self.cache_dir = Path("./purple_agent_cache")
         self.cache_dir.mkdir(exist_ok=True)
 
-        # Initialize evaluation system with config from file or defaults
-        eval_config = load_green_agent_config()
-        self.eval_config = eval_config
-        self.evaluation_pipeline = EvaluationPipeline(eval_config, self.model, self.api_base_url)
-        self.metrics_aggregator = MetricsAggregator(eval_config)
+        # Initialize evaluation system with config
+        self.evaluation_pipeline = EvaluationPipeline(config, self.model, self.api_base_url)
+        self.metrics_aggregator = MetricsAggregator(config)
         print(f"@@@ Green agent: ✅ Evaluation system initialized with {self.evaluation_pipeline.get_evaluator_count()['total']} evaluators")
 
     def _get_cache_path(self, problem_name: str) -> Path:

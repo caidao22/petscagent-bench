@@ -83,7 +83,7 @@ def load_purple_agent_config(config_path: str = "config/purple_agent_config.yaml
     return {
         'llm': {
             'model': 'gemini/gemini-3-flash-preview',
-            'api_base': None,
+            'api_base_url': None,
             'temperature': 0.3,
             'max_concurrent_calls': 3,
         },
@@ -136,17 +136,18 @@ class PetscAgentExecutor(AgentExecutor):
         ctx_id_to_messages: Dict mapping context IDs to conversation histories
     """
 
-    def __init__(self, model: str, api_base_url: str | None = None):
-        """Initialize the executor with a specific LLM model.
+    def __init__(self, config: Dict[str, Any]):
+        """Initialize the executor with an agent configuration.
 
         Args:
-            model: LLM model string compatible with litellm
-                   (e.g., "openai/gpt-4o", "gemini/gemini-2.5-flash")
-            api_base_url: Optional API base URL (e.g., "https://api.openai.com/v1").
-                         If None, uses LiteLLM default based on model provider.
+            config: Purple agent config dict (typically loaded from config/purple_agent_config.yaml).
         """
-        self.model = model
-        self.api_base_url = api_base_url
+        self.config = config
+        self.llm_config = config.get("llm")
+        self.model = self.llm_config.get("model")
+        self.temperature = float(self.llm_config.get("temperature"))
+        self.api_base_url = self.llm_config.get("api_base_url")
+
         # Track conversation history per context for multi-turn interactions
         self.ctx_id_to_messages = {}
 
@@ -203,7 +204,7 @@ class PetscAgentExecutor(AgentExecutor):
             completion_kwargs = {
                 'messages': messages,
                 'model': self.model,
-                'temperature': 0.0,
+                'temperature': self.temperature,
                 'response_format': ProblemResponse,
                 'timeout': 300,
             }
@@ -266,32 +267,37 @@ class PetscAgentExecutor(AgentExecutor):
         """
         raise NotImplementedError
 
-def start_purple_agent(host: str = "localhost", port: int=9002, card_url: str | None = None, agent_llm: str = "gemini/gemini-3-flash-preview", api_base_url: str | None = None):
-    """
-    Start the Purple Agent A2A HTTP service.
-
-    This sets up an A2A Starlette application backed by a `PetscAgentExecutor`,
-    an in-memory task store, and the default request handler, then serves it
-    via Uvicorn.
+def start_purple_agent(
+    host: str = "localhost",
+    port: int = 9002,
+    card_url: str | None = None,
+    agent_llm: str | None = None,
+    api_base_url: str | None = None,
+    config_path: str = "config/purple_agent_config.yaml",
+):
+    """Start the Purple Agent A2A HTTP service.
 
     Args:
         host: Interface to bind the HTTP server to.
         port: Port to bind the HTTP server to.
         card_url: Optional explicit URL used to build/advertise the agent card.
             If not provided, a URL is constructed from `host` and `port`.
-        agent_llm: LLM identifier/config string passed to `PetscAgentExecutor`.
-        api_base_url: Optional API base URL for LLM API calls.
-
-    Notes:
-        Although declared `async`, this function starts a blocking Uvicorn server
-        (`uvicorn.run(...)`) and will not return until the server stops.
-
+        agent_llm: Optional LLM model name (overrides config file value).
+        api_base_url: Optional LLM API base URL (overrides config file value).
+        config_path: Path to the Purple Agent config file (YAML/JSON).
     """
     logger.info("Starting purple agent...")
     card = prepare_purple_agent_card(card_url or f"http://{host}:{port}")
 
+    # Load config and apply CLI overrides
+    config = load_purple_agent_config(config_path)
+    if agent_llm:
+        config["llm"]["model"] = agent_llm
+    if api_base_url:
+        config["llm"]["api_base_url"] = api_base_url
+
     request_handler = DefaultRequestHandler(
-        agent_executor=PetscAgentExecutor(agent_llm, api_base_url=api_base_url),
+        agent_executor=PetscAgentExecutor(config),
         task_store=InMemoryTaskStore(),
     )
     app = A2AStarletteApplication(
@@ -305,8 +311,21 @@ if __name__ == "__main__":
     parser.add_argument("--host", type=str, default="localhost", help="Host to bind the server")
     parser.add_argument("--port", type=int, default=9002, help="Port to bind the server")
     parser.add_argument("--card-url", type=str, help="External URL for the agent card")
-    parser.add_argument("--agent-llm", type=str, default="gemini/gemini-3-flash-preview", help="LLM model to use, such as gemini/gemini-3-flash-preview, gemini/gemini-2.5-flash, gpt-5.2")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="config/purple_agent_config.yaml",
+        help="Path to Purple Agent config file (YAML/JSON)",
+    )
     parser.add_argument("--api-base-url", type=str, help="Optional LLM API base URL (overrides config)")
+    parser.add_argument("--agent-llm", type=str, help="LLM model to use (overrides config), e.g. gemini/gemini-2.5-flash, openai/gpt-4o")
     args = parser.parse_args()
 
-    start_purple_agent(args.host, args.port, args.card_url, args.agent_llm, api_base_url=args.api_base_url)
+    start_purple_agent(
+        host=args.host,
+        port=args.port,
+        card_url=args.card_url,
+        agent_llm=args.agent_llm,
+        api_base_url=args.api_base_url,
+        config_path=args.config,
+    )

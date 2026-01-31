@@ -14,10 +14,9 @@ import multiprocessing
 import asyncio
 import json
 import mcp
-from src.green_agent.server import start_green_agent
+from src.green_agent.server import start_green_agent, load_green_agent_config
 from src.purple_agent.petsc_agent import start_purple_agent, load_purple_agent_config
 from src.util.a2a_comm import wait_agent_ready, send_message
-from src.green_agent.agent import load_green_agent_config
 import os
 import dotenv
 

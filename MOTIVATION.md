@@ -8,9 +8,9 @@ petscagent-bench is a benchmark and harness for evaluating AI agents that genera
 
 Imagine you're a scientist trying to simulate how air circulates in the atmosphere, or an engineer modeling how heat flows through a nuclear reactor. These problems require solving massive systems of equations—millions or billions of unknowns—running on the world's most powerful supercomputers.
 
-For 30+ years, **PETSc** (Portable, Extensible Toolkit for Scientific Computation) has been the gold standard library for this. It powers simulations at national labs, universities, and research centers worldwide. But there's a catch: **PETSc is notoriously difficult to learn**.
+For 30+ years, **PETSc** (Portable, Extensible Toolkit for Scientific Computation) has been a gold standard library for advanced scientific computing. It powers simulations at national labs, universities, and research centers worldwide. **Getting started is straightforward**: you can use default algorithms and data structures to build a simplified model and get something running. The difficulty lies in going further. **Diving into progressively more complex details**—refining the model, choosing among solvers and preconditioners, tuning for your hardware—takes time. Learning the various options and understanding what is necessary for *your* particular circumstance is where the real investment lies.
 
-Writing correct, efficient PETSc code requires understanding:
+Writing correct, efficient PETSc code eventually requires understanding:
 
 - Distributed memory parallelism (MPI)
 - Sparse matrix formats and solvers
@@ -18,7 +18,7 @@ Writing correct, efficient PETSc code requires understanding:
 - Domain decomposition and load balancing
 - GPU acceleration with CUDA/Kokkos
 
-A PhD student might spend *months* just learning to write their first working simulation.
+Building fluency across these areas often takes months if not years of hands-on work.
 
 ---
 

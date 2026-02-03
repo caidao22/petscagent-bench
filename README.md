@@ -5,7 +5,7 @@ An agentified evaluation framework for testing PETSc code generation agents usin
 ## Overview
 
 This repository implements a multi-agent benchmark for evaluating code generation agents that produce PETSc (Portable, Extensible Toolkit for Scientific Computation) programs.
-
+> [!IMPORTANT]
 > 📖 See [MOTIVATION.md](MOTIVATION.md) for the motivation and design rationale behind this project.
 
 Core building blocks:
@@ -95,13 +95,14 @@ Unlike toy benchmarks, PETSc code generation tests whether LLMs can produce **sc
 
 ## Evaluation System
 
-For full details on the evaluation design, scoring, and components, see [EVALUATION_SYSTEM_SUMMARY.md](EVALUATION_SYSTEM_SUMMARY.md).
-
 At a high level, evaluation is organized into:
 
 - **Gates**: binary pass/fail checks (e.g., compilation/execution/API usage)
 - **Metrics**: quantitative measurements (e.g., numerical accuracy, execution time)
 - **Quality**: LLM-based qualitative assessment (e.g., code style, algorithm choice, PETSc best practices)
+
+> [!IMPORTANT]
+> For full details on the evaluation design, scoring, and components, see [EVALUATION_SYSTEM_SUMMARY.md](EVALUATION_SYSTEM_SUMMARY.md).
 
 ## Benchmark Problems
 

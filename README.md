@@ -92,6 +92,70 @@ PETSc is an ideal benchmark for evaluating LLM capabilities in scientific comput
 
 Unlike toy benchmarks, PETSc code generation tests whether LLMs can produce **scientifically valid, performant, and maintainable** solutions for real-world HPC applications. See [PETSc applications](https://petsc.org/main/miscellaneous/applications_publications/) for examples spanning climate modeling, CFD, astrophysics, and more.
 
+
+## Evaluation System
+
+For full details on the evaluation design, scoring, and components, see [EVALUATION_SYSTEM_SUMMARY.md](EVALUATION_SYSTEM_SUMMARY.md).
+
+At a high level, evaluation is organized into:
+
+- **Gates**: binary pass/fail checks (e.g., compilation/execution/API usage)
+- **Metrics**: quantitative measurements (e.g., numerical accuracy, execution time)
+- **Quality**: LLM-based qualitative assessment (e.g., code style, algorithm choice, PETSc best practices)
+
+## Benchmark Problems
+
+Benchmark problems are defined as JSON files under `data/`. The Green Agent loads **all** JSON files in that directory. 
+
+Each problem file is expected to contain (at minimum):
+
+- `problem_name`
+- `problem_id`
+- `problem_description`
+
+Current suite (see `data/` for full definitions):
+
+- Robertson ODE
+- 1D Advection
+- Rosenbrock optimization
+- Darcy flow
+- 2D Navier–Stokes
+- Vec/MPI tests
+
+`gpu_data` contains problems that run on GPUs. Since our Github runners do not support GPU at the moment, they are not included in the default setting, but can be activated manually. 
+
+### Evaluation Criteria
+
+Each problem is evaluated across multiple dimensions (see `config/green_agent_config.yaml` for weights):
+
+- Correctness
+- Performance
+- Code quality
+- Algorithm choice
+- PETSc best practices
+- Semantic correctness
+
+## Output
+
+### Files written to disk
+
+The Green Agent writes a single file to `output/`:
+
+- `output/benchmark_summary.json`: overall summary + per-problem results
+
+### Task artifacts
+
+The Green Agent also emits A2A task artifacts (via `TaskUpdater.add_artifact`). Depending on your runner/integration, these may be downloadable from logs/UI but are not written to `output/` by default:
+
+### Tier System
+
+Codes are assigned to tiers based on composite scores:
+
+- 🥇 **GOLD** (≥85): Excellent code quality and correctness
+- 🥈 **SILVER** (≥70): Good code with minor issues
+- 🥉 **BRONZE** (≥50): Functional but needs improvement
+- ❌ **FAIL** (<50 or gate failure): Significant issues
+
 ## Project Structure
 
 ```
@@ -230,71 +294,6 @@ llm:
 - Leave `api_base_url` `null` to use each provider’s default (e.g. `https://api.openai.com/v1`). Set this to use a custom or proxy endpoint (e.g. `https://apps-dev.inside.anl.gov/argoapi/v1` for Argo). For OpenAI-compatible APIs the URL should end with `/v1`; the client will use the appropriate LiteLLM provider prefix.
 - The system auto-detects AskSage endpoints when `api_base_url` starts with `https://api.asksage.anl.gov` and configures SSL and API keys accordingly.
 
-## Evaluation System
-
-For full details on the evaluation design, scoring, and components, see [EVALUATION_SYSTEM_SUMMARY.md](EVALUATION_SYSTEM_SUMMARY.md).
-
-At a high level, evaluation is organized into:
-
-- **Gates**: binary pass/fail checks (e.g., compilation/execution/API usage)
-- **Metrics**: quantitative measurements (e.g., numerical accuracy, execution time)
-- **Quality**: LLM-based qualitative assessment (e.g., code style, algorithm choice, PETSc best practices)
-
-## Benchmark Problems
-
-Benchmark problems are defined as JSON files under `data/`. The Green Agent loads **all** JSON files in that directory.
-
-Each problem file is expected to contain (at minimum):
-
-- `problem_name`
-- `problem_id`
-- `problem_description`
-
-Current suite (see `data/` for full definitions):
-
-- Robertson ODE
-- 1D Advection
-- Rosenbrock optimization
-- Darcy flow
-- 2D Navier–Stokes
-- Vec/MPI tests
-
-### Evaluation Criteria
-
-Each problem is evaluated across multiple dimensions (see `config/green_agent_config.yaml` for weights):
-
-- Correctness
-- Performance
-- Code quality
-- Algorithm choice
-- PETSc best practices
-- Semantic correctness
-
-## Output
-
-### Files written to disk
-
-The Green Agent writes a single file to `output/`:
-
-- `output/benchmark_summary.json`: overall summary + per-problem results
-
-### Task artifacts
-
-The Green Agent also emits A2A task artifacts (via `TaskUpdater.add_artifact`). Depending on your runner/integration, these may be downloadable from logs/UI but are not written to `output/` by default:
-
-- `benchmark_summary.json`
-- `evaluation_report.txt`
-- `evaluation_detailed_report.json`
-- `benchmark_result_<problem_name>.json`
-
-### Tier System
-
-Codes are assigned to tiers based on composite scores:
-
-- 🥇 **GOLD** (≥85): Excellent code quality and correctness
-- 🥈 **SILVER** (≥70): Good code with minor issues
-- 🥉 **BRONZE** (≥50): Functional but needs improvement
-- ❌ **FAIL** (<50 or gate failure): Significant issues
 
 ## Development
 

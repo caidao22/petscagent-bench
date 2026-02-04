@@ -1,0 +1,10 @@
+# Coding agent experiment: purple-style agent with MCP (same tools as green agent)
+# Same LLM options as purple_agent_config.yaml (Argo, AskSage, etc.)
+llm:
+  model: "openai/gpt52"
+  api_base_url: "https://apps-dev.inside.anl.gov/argoapi/v1"
+  temperature: 0
+
+# MCP: same PETSc compile-run server URL as the green agent
+mcp:
+  server_url: "http://localhost:8080/mcp"

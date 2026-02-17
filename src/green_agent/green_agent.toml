@@ -1,22 +1,58 @@
 name = "green_agent"
-description = "The assessment hosting agent for petscagent-bench."
+description = """
+Assessment manager and evaluation coordinator for petscagent-bench.
+Orchestrates the complete benchmark workflow: loads PETSc test problems,
+distributes them to a Purple Agent (code generator) via A2A, compiles and
+executes the generated code via MCP tools, runs a 14-evaluator pipeline
+(gates, metrics, and LLM-based quality checks), and produces tiered
+scoring reports (GOLD/SILVER/BRONZE/FAIL).
+"""
 version = "0.1.0"
 
-defaultInputModes = ["text"]
-defaultOutputModes = ["text"]
+defaultInputModes = ["text", "file"]
+defaultOutputModes = ["text", "file"]
+
 [capabilities]
 streaming = false
+pushNotifications = false
 
 [[skills]]
 id = "host_assess_petscagent_bench"
 name = "petscagent-bench assessment hosting"
 description = """
-Assess the coding ability of an agent.
+Assess the PETSc code-generation ability of an agent.
+
+The Green Agent loads benchmark problems (Robertson ODE, Advection PDE,
+Rosenbrock optimization, Darcy flow, 2D Navier-Stokes, Vec/MPI, etc.),
+sends each problem description to the target Purple Agent, then compiles
+and runs the generated C/C++ code against PETSc via an MCP server.
+
+Evaluation is a three-phase pipeline:
+  Phase 1 - Gates (pass/fail): compilation, execution, memory safety,
+            PETSc API usage.
+  Phase 2 - Metrics (quantitative): numerical accuracy against reference
+            solutions, execution time.
+  Phase 3 - Quality (LLM-based and static): code readability, style,
+            documentation, algorithm appropriateness, solver choice,
+            PETSc best practices, error handling, parallel awareness.
+
+Results are aggregated into a weighted composite score (0-100) across six
+categories (correctness 35%, performance 15%, code quality 15%,
+algorithm 15%, PETSc 10%, semantic 10%) and assigned a tier:
+  GOLD >= 85, SILVER >= 70, BRONZE >= 50, FAIL < 50.
+
+Outputs include per-problem benchmark results, a summary JSON report,
+and a detailed evaluation report.
 """
-tags = ["green agent", "assessment hosting", "petscagent-bench"]
-examples = ["""    
+tags = ["green agent", "assessment hosting", "petscagent-bench", "PETSc", "evaluation", "benchmarking"]
+examples = ["""
 Your task is to instantiate petscagent-bench to test the agent located at:
 <purple_agent_url>
 http://localhost:9002/
 </purple_agent_url>
-    """]
+<mcp_server_url>
+http://localhost:9003/mcp
+</mcp_server_url>
+<green_id>green-001</green_id>
+<purple_id>purple-001</purple_id>
+"""]

@@ -102,19 +102,22 @@ def prepare_purple_agent_card(url):
         AgentCard object describing the Purple Agent's capabilities
     """
     skill = AgentSkill(
-        id="task_fulfillment",
-        name="Task Fulfillment",
-        description="Handles user requests and completes tasks",
-        tags=["general"],
-        examples=[],
+        id="petsc_code_generation",
+        name="PETSc Code Generation",
+        description="Generates PETSc C/C++/CUDA code from natural language problem descriptions. "
+                    "Returns structured JSON with source files, MPI process count, and CLI arguments.",
+        tags=["purple agent", "code generation", "PETSc", "HPC"],
+        examples=["Write a PETSc program that solves the Robertson ODE system using TS."],
     )
     card = AgentCard(
-        name="file_agent",
-        description="Test agent from file",
+        name="purple_agent",
+        description="PETSc code generation agent for petscagent-bench. "
+                    "Receives scientific computing problem descriptions via A2A and "
+                    "uses an LLM to produce compilable PETSc C/C++ source code.",
         url=url,
-        version="1.0.0",
+        version="0.1.0",
         default_input_modes=["text/plain"],
-        default_output_modes=["text/plain"],
+        default_output_modes=["text/plain", "application/octet-stream"],
         capabilities=AgentCapabilities(),
         skills=[skill],
     )

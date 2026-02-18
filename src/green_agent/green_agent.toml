@@ -1,20 +1,55 @@
-name = "green_agent"
+# ──────────────────────────────────────────────────────────────
+# Green Agent Card — petscagent-bench
+# Last Updated: 2026-02-18
+# ──────────────────────────────────────────────────────────────
+
+# ── A2A Agent Card fields ────────────────────────────────────
+# Top-level fields are loaded by server.py and passed to
+# a2a.types.AgentCard(**dict).
+
+name = "Green Agent for PetscAgent-Bench"
 description = """
 Assessment manager and evaluation coordinator for petscagent-bench.
+
 Orchestrates the complete benchmark workflow: loads PETSc test problems,
 distributes them to a Purple Agent (code generator) via A2A, compiles and
 executes the generated code via MCP tools, runs a 14-evaluator pipeline
 (gates, metrics, and LLM-based quality checks), and produces tiered
 scoring reports (GOLD/SILVER/BRONZE/FAIL).
+
+The agent receives a user request containing Purple Agent and MCP server
+URLs, selects the host_assess_petscagent_bench skill, and invokes MCP
+tools to compile and execute generated PETSc code.
+
+Underlying model(s): N/A (the Green Agent itself is not an LLM; it uses
+an LLM for quality evaluation, configurable via green_agent_config.yaml).
 """
 version = "0.1.0"
+documentation_url = "https://github.com/petsc/petscagent-bench"
+protocol_version = "0.3.0"
+preferred_transport = "JSONRPC"
 
-defaultInputModes = ["text", "file"]
-defaultOutputModes = ["text", "file"]
+defaultInputModes = ["text/plain"]
+defaultOutputModes = ["text/plain", "application/json"]
+
+# ── Provider ─────────────────────────────────────────────────
+
+[provider]
+organization = "Argonne National Laboratory"
+url = "https://www.anl.gov"
+
+# ── Capabilities ─────────────────────────────────────────────
 
 [capabilities]
 streaming = false
 pushNotifications = false
+stateTransitionHistory = false
+
+# ── Authentication ───────────────────────────────────────────
+# No authentication required for local deployment.
+# For production, configure a Bearer scheme externally.
+
+# ── Skills ───────────────────────────────────────────────────
 
 [[skills]]
 id = "host_assess_petscagent_bench"
@@ -44,7 +79,14 @@ algorithm 15%, PETSc 10%, semantic 10%) and assigned a tier:
 Outputs include per-problem benchmark results, a summary JSON report,
 and a detailed evaluation report.
 """
-tags = ["green agent", "assessment hosting", "petscagent-bench", "PETSc", "evaluation", "benchmarking"]
+tags = [
+    "green agent",
+    "assessment hosting",
+    "petscagent-bench",
+    "PETSc",
+    "evaluation",
+    "benchmarking",
+]
 examples = ["""
 Your task is to instantiate petscagent-bench to test the agent located at:
 <purple_agent_url>
@@ -56,3 +98,86 @@ http://localhost:9003/mcp
 <green_id>green-001</green_id>
 <purple_id>purple-001</purple_id>
 """]
+input_modes = ["text/plain"]
+output_modes = ["text/plain", "application/json"]
+
+# ══════════════════════════════════════════════════════════════
+# GENESIS / BPSW metadata (not consumed by A2A AgentCard)
+# ══════════════════════════════════════════════════════════════
+
+[metadata]
+language = "en"
+tags = [
+    "project:genesis",
+    "team:PETSc",
+    "type:agent",
+    "science:applied mathematics",
+    "risk:general",
+]
+license = "BSD-2-Clause"
+license_name = "BSD 2-Clause Simplified License"
+developed_by = "Hong Zhang (hongzhang@anl.gov)"
+contributed_by = []
+awards = ["3rd Prize, Coding Agent Track, AgentX-AgentBeats Competition (Berkeley RDI)"]
+
+# ── Agent changelog ──────────────────────────────────────────
+# 2026-02-18  Update agent card to GENESIS guideline format
+# 2025-xx-xx  Initial public version
+
+# ── Extensions: agent runtime (BPSW-only) ───────────────────
+
+[extensions]
+
+[extensions.agent_runtime]
+framework = "A2A SDK + Starlette + Uvicorn"
+service_endpoint = ""
+rate_limits = ""
+logging = "loguru to stdout"
+memory = "stateful (InMemoryTaskStore per session)"
+
+# ── Extensions: tools and permissions ────────────────────────
+
+[[extensions.tools]]
+name = "petsc_compile_run"
+purpose = "Compile and execute PETSc C/C++ code via MCP"
+inputs = "source files, main_file, dependencies, cli_args"
+outputs = "compile stdout/stderr, run stdout/stderr, exit code"
+side_effects = "executes compiled binaries on the host"
+required_permissions = "MCP server access"
+
+# ── Extensions: hardware and software ────────────────────────
+
+[extensions.infrastructure]
+hardware = "CPU (GPU is optional)"
+software = "Python 3.12+, uv, PETSc (for MCP server)"
+reproducibility = "uv sync (see pyproject.toml)"
+
+# ── Extensions: intended uses ────────────────────────────────
+
+[extensions.intended_uses]
+primary_use = "Evaluate PETSc code-generation agents via automated benchmarks"
+primary_users = "Researchers evaluating LLM-based scientific code generation"
+mission_relevance = "DOE scientific computing; PETSc ecosystem quality assurance"
+out_of_scope = [
+    "General-purpose code evaluation outside PETSc",
+    "Production deployment without human review of results",
+]
+
+# ── Extensions: limitations and risks ────────────────────────
+
+[extensions.limitations]
+risks = """
+The Green Agent invokes compilation and execution of generated code via
+MCP tools. Arbitrary code execution on the host is a known side effect.
+Deployments should sandbox the MCP server appropriately.
+"""
+agent_specific_risks = """
+- Tool invocation: compiles and runs untrusted generated code.
+"""
+known_limitations = """
+"""
+
+# ── Extensions: contact ─────────────────────────────────────
+
+[extensions.contact]
+authors = ["Hong Zhang <hongzhang@anl.gov>"]
